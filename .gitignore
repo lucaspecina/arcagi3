@@ -1,6 +1,7 @@
 # ARC-AGI-3 runtime files
 environment_files/
 recordings/
+frames/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

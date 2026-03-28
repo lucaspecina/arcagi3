@@ -3,12 +3,22 @@
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
 from arcengine import GameAction, GameState
 
-from .grid_utils import grid_to_base64, grid_to_text_compact, image_diff, image_to_base64
+from PIL import Image
+
+from .grid_utils import (
+    grid_to_ansi,
+    grid_to_base64,
+    grid_to_image,
+    grid_to_text_compact,
+    image_diff,
+    image_to_base64,
+)
 
 # Map human-readable action names to GameAction enum
 ACTION_MAP = {
@@ -30,32 +40,81 @@ ACTION_MAP = {
 }
 
 SYSTEM_PROMPT = """\
-You are an agent playing an abstract reasoning game on a 64x64 grid with 16 colors.
+You are playing an ARC-AGI-3 game. These are abstract visual puzzle environments on a \
+64x64 grid with 16 colors. Each environment is a game with multiple levels.
 
-Your goal: figure out the rules of the environment, complete levels, and win the game.
-There are NO written instructions — you must discover everything through interaction.
+THE CRITICAL CHALLENGE: You have NO instructions. The game tells you NOTHING.
+You must discover THREE things through experimentation:
+  1. CONTROLS — What does each action do? Which actions move things? Which interact?
+  2. RULES — What are the mechanics? What objects exist? How do they interact?
+  3. GOAL — What are you trying to achieve? What triggers level completion?
 
-Each turn you receive:
-- The current grid state (as an image and/or text)
-- A diff showing what changed since last turn
-- Your action history
+## What you see
+A 64x64 colored grid. Objects are patterns of colored pixels. You control something \
+on the grid (an avatar, a cursor, a block — you must figure out what).
 
-You must respond with a JSON object:
+## Available actions
+- UP, DOWN, LEFT, RIGHT — directional movement/manipulation
+- INTERACT — general interaction (like pressing a button, picking up, activating)
+- CLICK x,y — click on a specific grid coordinate (0-63 range)
+- UNDO — undo last action
+- RESET — restart current level from scratch
+
+## How to think
+
+BEFORE your first action, study the initial image carefully:
+- What distinct objects/shapes/regions do you see?
+- What colors are used and what might they represent?
+- What looks like it could be controllable vs static?
+- What looks like it could be a goal/target?
+- Form a hypothesis about what kind of game this might be.
+
+ON EVERY TURN, your reasoning must address:
+- OBSERVATION: What changed in the grid? What stayed the same?
+- CONTROLS: What did my last action do? Update your understanding of controls.
+- RULES: What rules/mechanics have I discovered? What's still unknown?
+- GOAL: What do I think the objective is? Any new evidence?
+- PLAN: What should I try next and why?
+
+## Strategy
+- Level 1 is ALWAYS a tutorial — it teaches you the basic mechanics. Pay close attention.
+- Be SYSTEMATIC: test each action methodically, don't repeat the same thing.
+- When something changes on the grid, that's a clue — analyze WHY it changed.
+- Keep a mental map of what you've tried and what worked.
+- If stuck for several turns, RESET and try a completely different approach.
+- Later levels introduce new mechanics on top of what you learned.
+
+## Your knowledge state (CRITICAL — this is your long-term memory)
+You have a persistent knowledge dict that survives ALL turns, even when older messages \
+are dropped. You MUST update it every turn with your latest discoveries.
+
+If you don't write it down, you WILL forget it.
+
+## Response format
+Respond with a JSON object:
 {
-  "reasoning": "Brief analysis: what changed, what you learned, what to try next",
+  "reasoning": "Your detailed thinking: OBSERVATION (what changed), analysis, and PLAN (next steps)",
   "action": "UP|DOWN|LEFT|RIGHT|INTERACT|CLICK|UNDO|RESET",
   "x": 0,
-  "y": 0
+  "y": 0,
+  "memory": {
+    "controls": {"UP": "what it does", "DOWN": "what it does", ...},
+    "rules": ["rule 1 discovered", "rule 2 discovered", ...],
+    "goal": "current hypothesis about what wins the level",
+    "map": "description of the layout and key objects/positions",
+    "plan": "current strategy to win — what to try next and why"
+  }
 }
 
-The "x" and "y" fields are ONLY needed for CLICK actions (0-63 range).
+RULES for the memory dict:
+- ALWAYS include it. Update it EVERY turn.
+- "controls": map each action to what you observed it does. Mark unknown ones as "untested".
+- "rules": list of confirmed game mechanics. Only add things you've verified.
+- "goal": your best hypothesis about the win condition. Update as you learn more.
+- "map": describe the spatial layout, objects, colors, and positions you've identified.
+- "plan": your step-by-step strategy. Update when your plan changes.
 
-Tips:
-- Level 1 is always a tutorial — pay attention to what works
-- Try systematic exploration first: move in each direction, interact with objects
-- Track what causes changes in the grid — those are the mechanics
-- If stuck, try RESET to restart the current level
-- The game has multiple levels with increasing complexity
+The "x" and "y" fields are ONLY needed for CLICK actions.
 """
 
 
@@ -71,6 +130,10 @@ class AgentConfig:
     use_text: bool = True
     message_history_limit: int = 10
     temperature: float = 0.7
+    delay: float = 0.0
+    save_frames: bool = False
+    frames_dir: str = "frames"
+    show_grid: bool = False
 
     def __post_init__(self):
         if not self.base_url:
@@ -148,9 +211,9 @@ def build_user_message(
         )
         text_parts.append(f"Recent: {history}")
 
-    # Agent memory/scratchpad
+    # Agent memory/scratchpad — persists even when old messages are dropped
     if state.memory:
-        text_parts.append(f"Your notes: {state.memory}")
+        text_parts.append(f"\n=== YOUR SCRATCHPAD (persists across turns) ===\n{state.memory}\n===")
 
     content.append({"type": "text", "text": "\n".join(text_parts)})
 
@@ -184,15 +247,21 @@ def build_user_message(
 
 
 def parse_response(text: str) -> dict:
-    """Extract JSON action from LLM response text."""
-    # Try to find JSON in the response
-    # First try: find JSON block
-    match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
+    """Extract JSON action from LLM response text, supporting nested objects."""
+    # Try to find the outermost JSON object using balanced braces
+    start = text.find("{")
+    if start != -1:
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except json.JSONDecodeError:
+                        break
 
     # Fallback: try parsing the whole response
     try:
@@ -234,7 +303,7 @@ def choose_action(
         model=config.model,
         messages=messages,
         temperature=config.temperature,
-        max_completion_tokens=300,
+        max_completion_tokens=1500,
     )
 
     reply_text = response.choices[0].message.content or ""
@@ -246,7 +315,11 @@ def choose_action(
 
     # Update agent memory if provided
     if "memory" in parsed:
-        state.memory = parsed["memory"]
+        mem = parsed["memory"]
+        if isinstance(mem, dict):
+            state.memory = json.dumps(mem, indent=2)
+        else:
+            state.memory = str(mem)
 
     # Map to GameAction
     action_name = parsed.get("action", "INTERACT").upper()
@@ -278,6 +351,14 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
     client = create_client(config)
     state = AgentState()
+    saved_frames: list[Image.Image] = []
+
+    # Set up frame saving
+    if config.save_frames:
+        from pathlib import Path
+        frames_path = Path(config.frames_dir)
+        frames_path.mkdir(parents=True, exist_ok=True)
+        print(f"  Saving frames to: {frames_path.resolve()}")
 
     # Get initial observation
     obs = env.reset()
@@ -287,14 +368,31 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
     grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
 
+    # Show initial grid
+    if config.show_grid:
+        print("  Initial state:")
+        print(grid_to_ansi(grid))
+
+    # Save initial frame
+    if config.save_frames:
+        img = grid_to_image(grid, scale=4)
+        img.save(frames_path / "step_000_initial.png")
+        saved_frames.append(img.copy())
+
     for step_num in range(config.max_actions):
         # Ask LLM for action
         game_action, data, reasoning = choose_action(client, grid, state, config)
 
         action_name = game_action.name
-        print(f"  Step {step_num + 1}: {action_name}"
-              f"{f' ({data})' if data else ''}"
-              f" — {reasoning[:80]}")
+        action_labels = {
+            "ACTION1": "UP", "ACTION2": "DOWN", "ACTION3": "LEFT", "ACTION4": "RIGHT",
+            "ACTION5": "INTERACT", "ACTION6": "CLICK", "ACTION7": "UNDO", "RESET": "RESET",
+        }
+        label = action_labels.get(action_name, action_name)
+        coords = f" x={data['x']},y={data['y']}" if data else ""
+        print(f"\n  [{step_num + 1}/{config.max_actions}]")
+        print(f"  Thinking: {reasoning}")
+        print(f"  Action:   >>> {label}{coords}")
 
         # Execute action
         obs = env.step(game_action, data=data or {})
@@ -320,6 +418,20 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         if obs.frame:
             grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
 
+        # Show grid in terminal
+        if config.show_grid:
+            print(grid_to_ansi(grid))
+
+        # Save frame
+        if config.save_frames:
+            img = grid_to_image(grid, scale=4)
+            img.save(frames_path / f"step_{step_num + 1:03d}_{label.lower()}.png")
+            saved_frames.append(img.copy())
+
+        # Delay for visual rendering
+        if config.delay > 0:
+            time.sleep(config.delay)
+
         # Check terminal states
         if obs.state == GameState.WIN:
             print(f"  WIN after {step_num + 1} steps! "
@@ -331,5 +443,17 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             if obs and obs.frame:
                 grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
                 state.prev_grid = None
+
+    # Save GIF of all frames
+    if config.save_frames and len(saved_frames) > 1:
+        gif_path = frames_path / "replay.gif"
+        saved_frames[0].save(
+            gif_path,
+            save_all=True,
+            append_images=saved_frames[1:],
+            duration=500,  # 500ms per frame
+            loop=0,
+        )
+        print(f"  Replay GIF saved: {gif_path.resolve()}")
 
     return state

@@ -81,6 +81,52 @@ def image_diff(prev: np.ndarray, curr: np.ndarray, scale: int = 2) -> Image.Imag
     return img
 
 
+# ANSI true-color (24-bit) versions of the palette for terminal rendering
+ANSI_PALETTE = {
+    0: (255, 255, 255),  # White
+    1: (204, 204, 204),  # Off-white
+    2: (153, 153, 153),  # Neutral light
+    3: (102, 102, 102),  # Neutral
+    4: (51, 51, 51),     # Off-black
+    5: (0, 0, 0),        # Black
+    6: (229, 58, 163),   # Magenta
+    7: (255, 123, 204),  # Magenta light
+    8: (249, 60, 49),    # Red
+    9: (30, 147, 255),   # Blue
+    10: (136, 216, 241), # Blue light
+    11: (255, 220, 0),   # Yellow
+    12: (255, 133, 27),  # Orange
+    13: (146, 18, 49),   # Maroon
+    14: (79, 204, 48),   # Green
+    15: (163, 86, 214),  # Purple
+}
+
+
+def grid_to_ansi(grid: np.ndarray, downsample: int = 2) -> str:
+    """Render grid as colored blocks in the terminal using ANSI true-color.
+
+    Uses background-colored spaces, one char per pixel (after downsampling).
+
+    Args:
+        grid: 2D array (64x64), values 0-15.
+        downsample: Factor to reduce resolution (2 = 32x32 output).
+
+    Returns:
+        String with ANSI escape codes ready to print.
+    """
+    h, w = grid.shape
+    lines = []
+    step = downsample
+    for y in range(0, h, step):
+        line = []
+        for x in range(0, w, step):
+            val = int(grid[y, x])
+            r, g, b = ANSI_PALETTE.get(val, (0, 0, 0))
+            line.append(f"\033[48;2;{r};{g};{b}m  ")
+        lines.append("".join(line) + "\033[0m")
+    return "\n".join(lines)
+
+
 def grid_to_text(grid: np.ndarray) -> str:
     """Convert grid to compact text representation (JSON matrix)."""
     return json.dumps(grid.tolist())

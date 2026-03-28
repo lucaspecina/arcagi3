@@ -17,6 +17,10 @@ def main():
     parser.add_argument("--render", default="terminal", help="Render mode: terminal, human, or none")
     parser.add_argument("--list-games", action="store_true", help="List available games and exit")
     parser.add_argument("--temperature", type=float, default=0.7, help="LLM temperature")
+    parser.add_argument("--delay", type=float, default=0.0, help="Delay between steps in seconds (for watching live)")
+    parser.add_argument("--show-grid", action="store_true", help="Show colored grid in terminal after each step")
+    parser.add_argument("--save-frames", action="store_true", help="Save each frame as PNG + final GIF replay")
+    parser.add_argument("--frames-dir", default="frames", help="Directory to save frames (default: frames/)")
     args = parser.parse_args()
 
     import arc_agi
@@ -41,6 +45,10 @@ def main():
         use_vision=not args.no_vision,
         use_text=args.no_vision,
         temperature=args.temperature,
+        delay=args.delay,
+        show_grid=args.show_grid,
+        save_frames=args.save_frames,
+        frames_dir=args.frames_dir,
     )
 
     # Create environment
