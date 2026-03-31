@@ -24,6 +24,22 @@ Todavia no se ha testeado (requiere API keys configuradas).
 ## Test coverage
 Sin tests todavia.
 
+## Project structure
+El proyecto sigue el framework estandar de dev-workflow:
+- **issues/** — tracking local con I-NNN (I-001 bootstrap, I-002 alignment)
+- **experiments/** — directorio para experimentos formales con manifest.yaml
+- **AUTORESEARCH.md** — configuracion de modo autonomo (actualmente OFF)
+- **research/** — notas de investigacion y sintesis
+
+## Como probarlo
+```bash
+pip install -e ".[dev]"                          # instalar
+cp .env.example .env                             # configurar API keys
+python -m arcagi3.run --list-games               # ver juegos disponibles
+python -m arcagi3.run --game ls20                # correr agente en ls20
+python -m arcagi3.run --game ls20 --no-vision    # modo text-only
+```
+
 ## Known limitations
 - No se ha testeado con API keys reales
 - Parse de respuesta LLM es basico (regex JSON)

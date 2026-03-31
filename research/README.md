@@ -20,6 +20,7 @@
 | `notes/arc-agi-overview.md` | Overview general: ARC-AGI-3 vs 2, approaches, competencia |
 | `notes/arc-agi-3-toolkit.md` | API completa del toolkit `arc-agi`, agents, benchmarking |
 | `notes/arc-agi-2-loading.md` | Como cargar datasets ARC-AGI-1/2 en Python (arckit, DIY) |
+| `notes/arc-agi-dataset-loading.md` | Referencia completa: JSON format, arckit, arc-agi-core, DIY loaders |
 
 ## Rules
 - Notes van en `notes/`, conclusiones consolidadas en `synthesis/`

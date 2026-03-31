@@ -26,17 +26,6 @@ demostrada, con una linea de investigacion paralela en ARC-AGI-3 (entornos inter
 3. **Modular** — separar data loading, prompting, inference, evaluation
 4. **Cost-conscious** — trackear costo por tarea, optimizar tokens
 
-## Architecture overview (preliminary)
-```
-data/          <- datasets ARC-AGI (descargados)
-src/
-  loader.py    <- carga y parsea tareas ARC-AGI
-  prompts.py   <- templates de prompts para LLMs
-  inference.py <- llamadas a LLMs via Azure Foundry
-  evaluate.py  <- evaluacion de respuestas vs ground truth
-research/      <- investigacion y notas
-```
-
 ## What success looks like
 - Tener un pipeline funcional que toma tareas ARC-AGI, las pasa por un LLM, y evalua resultados
 - Superar un baseline random significativamente
