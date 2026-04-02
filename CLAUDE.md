@@ -27,9 +27,15 @@
 | Config de autoresearch | AUTORESEARCH.md |
 
 ## Project overview
-Proyecto para **ganar ARC Prize 2026 en ARC-AGI-3**. Harness que orquesta modelos
-frontier (GPT-5.4, otros, combinaciones) para resolver entornos interactivos.
-Ciclo: research → implementacion → analisis → nuevo research. Iterar rapido, medir todo.
+Proyecto para **ganar ARC Prize 2026 en ARC-AGI-3**. Harness de META-COGNICION que
+potencia GPT-5.4 para resolver entornos interactivos ARC-AGI-3 de forma GENERALIZABLE.
+
+**OBJETIVO CENTRAL**: Construir scaffold que EXTRAIGA las capacidades latentes del LLM
+via buenas preguntas, memoria/abstracciones, multi-agente (critic, sintesis, debate),
+tools, y multi-run learning. El LLM es el CEREBRO — el harness lo potencia.
+
+**PROHIBIDO**: Codigo game-specific, leer source code de juegos, hardcodear mecanicas,
+reemplazar al LLM con solvers programaticos. Todo debe funcionar en TODOS los juegos.
 
 ## Environment setup
 ```bash

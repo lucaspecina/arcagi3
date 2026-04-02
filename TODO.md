@@ -1,16 +1,23 @@
 # TODO
 
+**RECORDAR: El objetivo es un harness de meta-cognicion GENERALIZABLE.
+El LLM es el cerebro. El harness lo potencia con estructura.
+NUNCA codigo game-specific.**
+
 ## NOW
-- [ ] Diseño de approach: parallel runs + synthesis + critic → I-003
-- [ ] Testear agente actual en ARC-AGI-3 con API keys (baseline)
+- [ ] Implementar multi-run con sintesis de abstracciones (N runs → sintetizar → reintentar) → I-003
+- [ ] Implementar critic agent (cuestiona razonamientos, detecta contradicciones) → I-003
+- [ ] Evaluar en multiples juegos (no solo uno) con N>1 por juego → I-003
 
 ## NEXT
-- [ ] Diseñar e implementar primer approach basado en research
-- [ ] Evaluar approach vs baseline en subset de tareas
-- [ ] Iterar: analisis → nuevo approach → eval
+- [ ] Memoria de abstracciones cross-run (que sobreviva entre intentos)
+- [ ] Multi-agente: paralelo + debate + sintesis
+- [ ] Tools para el LLM (comparacion de frames, verificacion de hipotesis)
+- [ ] Mejorar prompts: preguntas que fuercen mejor razonamiento
 
 ## LATER
 - [ ] Multi-model orchestration (combinar GPT-5.4 + otros)
+- [ ] Cross-game meta-knowledge (abstracciones que transfieren entre juegos)
 - [ ] Test-time compute optimization (search, verification, self-correction)
 - [ ] Submission a ARC-AGI-3 leaderboard
 

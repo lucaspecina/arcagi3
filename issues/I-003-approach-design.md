@@ -10,10 +10,16 @@ related: [I-001, I-002]
 # I-003: Diseño de approach para ARC-AGI-3
 
 ## Status
-- **Estado:** Brainstorm de ideas, evaluando approaches
-- **Hipotesis actual:** Multi-run con sintesis + critic puede superar agente single-run
-- **Ultimo resultado:** Ideas iniciales documentadas
-- **Proximo paso:** Evaluar viabilidad, priorizar, diseñar primer experimento
+- **Estado:** Implementacion de harness meta-cognitivo generalizable
+- **Hipotesis actual:** Multi-run con sintesis + critic + abstracciones potencia al LLM
+- **Ultimo resultado:** Autoresearch fallido (13 exp, todo 0.0) — se fue por game-specific. REVERTIDO.
+- **Proximo paso:** Implementar multi-run + sintesis, critic agent, evaluar en multiples juegos
+
+## OBJETIVO CENTRAL
+Construir harness de META-COGNICION que extraiga capacidades latentes de GPT-5.4
+de forma GENERALIZABLE. El LLM es el cerebro. El harness lo potencia con:
+buenas preguntas, memoria/abstracciones, multi-agente, critic, tools, multi-run learning.
+**PROHIBIDO: codigo game-specific, source code de juegos, solvers programaticos.**
 
 ## Pregunta
 Cual es el approach mas efectivo para un harness que orqueste LLMs frontier

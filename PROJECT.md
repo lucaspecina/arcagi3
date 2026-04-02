@@ -32,9 +32,32 @@ no logran usar esas capacidades de forma consistente y automatica.
 forma inteligente: cuestionando, verificando, sintetizando, abstrayendo.
 El harness convierte capacidades latentes en rendimiento real.
 
+## EL OBJETIVO CENTRAL — NO PERDERLO NUNCA
+**Construir un harness/scaffold de META-COGNICION que maximice las capacidades
+de GPT-5.4 para ARC-AGI-3 de forma GENERALIZABLE a todos los juegos.**
+
+Esto significa:
+- **SIN informacion externa** — no leer source code, no hardcodear mecanicas,
+  no inyectar conocimiento game-specific. El sistema tiene que aprender solo.
+- **Meta-cognicion** — el harness FUERZA al modelo a extraer, mantener, combinar
+  y mejorar sus propios razonamientos. El LLM es el CEREBRO, el harness lo
+  potencia con estructura.
+- **Generalizable** — cada pieza de codigo debe funcionar en TODOS los juegos.
+  Si solo sirve para un juego, no sirve.
+
+Las palancas del harness son:
+- **Buenas preguntas** — prompts que fuerzan al LLM a razonar mejor
+- **Memoria y abstracciones** — que el LLM construya conocimiento acumulativo
+- **Multi-agente** — multiples runs en paralelo, sintesis de abstracciones,
+  critic que cuestiona, debate entre perspectivas
+- **Tools** — darle herramientas al LLM (diff, comparacion, verificacion)
+- **Multi-run learning** — N intentos → sintetizar → abstraer → reintentar
+  con mas conocimiento. Cada run mejora el siguiente.
+
 Validacion: si le mostramos dos frames al LLM y le preguntamos especificamente
 "para que lado se movio el objeto?", probablemente lo reconoce. El desafio es
-que lo haga solo, sin que le preguntemos.
+que lo haga solo, sin que le preguntemos. El harness tiene que hacer que se
+haga esas preguntas a si mismo.
 
 ## Key concepts
 - **ARC-AGI-3**: Entornos interactivos turn-based (64x64, 16 colores). LLMs <1%. El desafio mas duro
@@ -54,6 +77,8 @@ que lo haga solo, sin que le preguntemos.
 4. **Extraer, no reemplazar** — el LLM puede, el harness extrae. No construir CNNs si el LLM ya ve
 5. **Cuestionar todo** — ninguna abstraccion es definitiva, todo se re-verifica
 6. **Multi-model por diseño** — el harness puede usar cualquier modelo o combinacion
+7. **GENERALIZABLE siempre** — NUNCA codigo game-specific. Todo debe funcionar en todos los juegos
+8. **El LLM es el cerebro** — no reemplazarlo con solvers programaticos. Potenciarlo con estructura
 
 ## What success looks like
 - **Score competitivo en ARC-AGI-3 leaderboard** — top positions

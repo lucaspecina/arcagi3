@@ -1,13 +1,12 @@
 # Current State
 
 ## Que es esto?
-Un proyecto de investigacion para ARC Prize 2026. Tenemos un agente LLM que
-interactua con entornos ARC-AGI-3 (puzzles interactivos turn-based en grillas
-64x64 con 16 colores). El agente usa Azure AI Foundry para inferencia y el
-toolkit oficial `arc-agi` para conectarse a los entornos.
+Un proyecto para **ganar ARC Prize 2026**. Construimos un harness de meta-cognicion
+que potencia GPT-5.4 para resolver puzzles interactivos ARC-AGI-3 (grillas 64x64,
+16 colores, turn-based). El harness extrae las capacidades latentes del LLM via
+buenas preguntas, memoria, abstracciones, multi-agente, y tools.
 
-La idea es explorar si los LLMs pueden razonar sobre estos puzzles, empezando
-simple y midiendo todo.
+**El LLM es el cerebro. El harness lo potencia. Todo generalizable a todos los juegos.**
 
 ## Que funciona hoy
 
