@@ -1,0 +1,384 @@
+[
+  {
+    "game_id": "g50t-5849a774",
+    "steps": 30,
+    "levels_completed": 0,
+    "deaths": 0,
+    "score": 0.0,
+    "actions": [
+      {
+        "step": 1,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 2,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 3,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 4,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 5,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 6,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 7,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 8,
+        "action": "ACTION5",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 9,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 10,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 11,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 12,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 13,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 14,
+        "action": "ACTION5",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 15,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 16,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 17,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 18,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 19,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 20,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 21,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 22,
+        "action": "ACTION2",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 23,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 24,
+        "action": "ACTION3",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 25,
+        "action": "ACTION1",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 26,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 27,
+        "action": "ACTION1",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 28,
+        "action": "ACTION1",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 29,
+        "action": "ACTION1",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 30,
+        "action": "ACTION4",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      }
+    ],
+    "elapsed": 51.8,
+    "label": "g50t (full instructions)"
+  },
+  {
+    "game_id": "ft09-0d8bbf25",
+    "steps": 30,
+    "levels_completed": 0,
+    "deaths": 0,
+    "score": 0.0,
+    "actions": [
+      {
+        "step": 1,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 2,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 3,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 4,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 5,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 6,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 7,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 8,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 9,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 10,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 11,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 12,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 13,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 14,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 15,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 16,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 17,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 18,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 19,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 20,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 21,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 22,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 23,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 24,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 25,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 26,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 27,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 28,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 29,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      },
+      {
+        "step": 30,
+        "action": "ACTION6",
+        "state": "NOT_FINISHED",
+        "levels": 0
+      }
+    ],
+    "elapsed": 58.7,
+    "label": "ft09 (basic instructions)"
+  }
+]
