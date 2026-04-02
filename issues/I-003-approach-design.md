@@ -137,5 +137,41 @@ avatar, qué es un obstáculo. No redescubre esos conceptos en cada juego.
 - ¿En qué orden jugar los juegos para maximizar transfer de meta-knowledge?
 - ¿Cuántas vidas da cada juego? ¿Es siempre 3 o varía?
 
+### 2026-04-02 · DEBATE — Codex critique del approach
+
+Codex revisó la arquitectura de 6 capas y el roadmap. Feedback duro:
+
+**Veredicto:** "Su roadmap parece diseñado para un paper lindo, no para
+subir leaderboard rápido."
+
+**Criticas principales:**
+1. **Sobre-arquitecturado.** 6 capas para un proyecto que no tiene ni eval harness.
+   Cortar: critic, memory tiers, skill library, parallel synthesis. Son prematuros.
+2. **Falta eval + instrumentacion.** Sin benchmark serio, cualquier mejora "parece"
+   buena. Necesitamos per-game success, acciones desperdiciadas, novel states.
+3. **No ser LLM-first.** Gap es 12% (non-LLM) vs <1% (LLM). Non-LLM infra primero,
+   LLM como helper puntual.
+4. **WorldCoder global: no.** Demasiada variedad. Si, para mecanicas locales/parciales.
+5. **Subestimamos representacion del estado.** Frame hash + diff no alcanza. Necesitamos
+   estado canonico orientado a objetos/eventos.
+6. **Subestimamos ACTION6.** Espacio accion-coordenada es enorme. Necesita priors
+   espaciales, saliency.
+7. **Parallel runs ahora = 10x basura.** Primero un buen explorer.
+8. **Cross-game priors pueden contaminar.** "ACTION1-4 = movimiento" puede ser falso.
+
+**Re-priorizacion de Codex:**
+- HACER: eval harness, state graph, canonical state/object extraction, spatial
+  action proposal, non-LLM search, logs masivos
+- NO HACER (aun): critic, reflection tiers, cross-game memory, parallel synthesis,
+  WorldCoder completo, Voyager skill library
+
+**Contra-argumentos (Claude):**
+- GPT-5.4 es mucho mas capaz que lo que probaron otros (<1% fue con Gemini 3.1 Pro).
+  Con buena infra el LLM podria aportar mas.
+- Cross-game learning es lo que hacen los humanos, descartarlo del todo es riesgoso.
+
+**Decision:** Repensar el approach. Evaluar pivot a non-LLM first con LLM como
+helper. Definir MVP minimo y eval harness antes de features avanzados.
+
 ## Conclusion
 <!-- Se llena al cerrar el issue -->

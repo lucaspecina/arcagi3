@@ -22,23 +22,41 @@ es iterativo: research → implementacion → analisis → nuevo research.
 hacemos tiene que acercarnos a ese objetivo. Si un approach no mueve la aguja
 en las metricas, se descarta y se prueba otro.
 
+## Core hypothesis
+**Los LLMs frontier (GPT-5.4, etc.) YA tienen las capacidades cognitivas
+necesarias para resolver ARC-AGI-3** — reconocer objetos, entender movimiento,
+identificar patrones, inferir goals. El problema no es que no puedan, sino que
+no logran usar esas capacidades de forma consistente y automatica.
+
+**Nuestro trabajo es construir un harness que EXTRAIGA esas capacidades** de
+forma inteligente: cuestionando, verificando, sintetizando, abstrayendo.
+El harness convierte capacidades latentes en rendimiento real.
+
+Validacion: si le mostramos dos frames al LLM y le preguntamos especificamente
+"para que lado se movio el objeto?", probablemente lo reconoce. El desafio es
+que lo haga solo, sin que le preguntemos.
+
 ## Key concepts
 - **ARC-AGI-3**: Entornos interactivos turn-based (64x64, 16 colores). LLMs <1%. El desafio mas duro
 - **Harness**: Sistema que orquesta uno o mas LLMs — prompting, memoria, planificacion, herramientas
-- **Multi-model**: Usar varios modelos (GPT-5.4, DeepSeek, Claude, etc.) en conjunto, cada uno en su fortaleza
-- **Induction vs Transduction**: Generar programa (induccion) vs predecir output directo (transduccion)
-- **Test-time compute**: Dedicar mas compute en inferencia (search, verification, self-correction)
+- **Capacidades latentes**: Los LLMs tienen habilidades que no emergen con prompting naive.
+  El harness las extrae via: preguntas dirigidas, verificacion, abstraccion, sintesis
+- **Abstracciones**: No solo memoria cruda — el harness construye entendimiento de alto nivel
+  ("esto es un juego de navegacion", "los rojos matan", "la barra es vida")
+- **Multi-run learning**: Multiples intentos → sintetizar → abstraer → reintentar con mas conocimiento
+- **Hipotesis, no hechos**: Toda afirmacion en memoria es una hipotesis que se cuestiona constantemente
 - **Azure AI Foundry**: Plataforma para llamar LLMs (catalogo completo) via API
 
 ## Design principles
 1. **Ganar primero, elegancia despues** — lo que funcione en las metricas es lo que vale
 2. **Iterar rapido** — ciclo research→impl→eval corto, no overengineer
 3. **Medir todo** — cada approach tiene metricas claras, comparables, reproducibles
-4. **Multi-model por diseño** — el harness puede usar cualquier modelo o combinacion
-5. **Test-time compute** — usar todo el compute disponible en inferencia
+4. **Extraer, no reemplazar** — el LLM puede, el harness extrae. No construir CNNs si el LLM ya ve
+5. **Cuestionar todo** — ninguna abstraccion es definitiva, todo se re-verifica
+6. **Multi-model por diseño** — el harness puede usar cualquier modelo o combinacion
 
 ## What success looks like
 - **Score competitivo en ARC-AGI-3 leaderboard** — top positions
 - Sistema que resuelve un % significativo de tareas que hoy ningun LLM resuelve (<1%)
+- Demostrar que el gap 12% vs <1% se cierra con mejor orquestacion, no con otro paradigma
 - Framework para iterar rapido: nueva idea → implementar → medir → decidir en horas, no semanas
-- Entender QUE tipos de razonamiento necesitan las tareas y COMO los LLMs pueden aportar

@@ -21,6 +21,7 @@
 | `notes/arc-agi-3-toolkit.md` | API completa del toolkit `arc-agi`, agents, benchmarking |
 | `notes/arc-agi-2-loading.md` | Como cargar datasets ARC-AGI-1/2 en Python (arckit, DIY) |
 | `notes/arc-agi-dataset-loading.md` | Detalles adicionales de carga de datasets |
+| `notes/sota-abstractions-tools-agents.md` | SOTA: abstracciones, tool creation, world models, memory, competition approaches (I-003) |
 
 ## Synthesis index
 | File | Contenido |
