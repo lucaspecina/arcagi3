@@ -111,11 +111,14 @@ What did you learn that isn't captured in any existing belief?
 ## STEP 5: STRATEGY CHECK
 - Am I making PROGRESS toward the goal? (count steps without progress)
 - If NOT progressing: is my goal WRONG? List 2 alternative goal hypotheses.
+- **MANDATORY: If steps_without_progress >= 5, you MUST change your goal hypothesis \
+to your best alternative. The current goal has FAILED. Do not keep it.**
 - What action sequence have I NOT tried that might reveal something new?
 - What is my BIGGEST uncertainty right now and how do I resolve it?
 
 ## STEP 6: UPDATED BELIEFS
 Output the COMPLETE updated belief set incorporating all changes from step 3-5.
+**If you changed the goal in step 5, the new goal MUST appear in updated_beliefs.**
 
 Respond with JSON:
 {
@@ -469,6 +472,16 @@ def run_reflector(
     if analysis:
         text += f"\n\n=== PERCEPTION ===\n{analysis}\n==="
     text += f"\n\n=== YOUR BELIEFS — Review EACH one. Verdict + justification required ===\n{belief_list}\n==="
+
+    # Harness-enforced stagnation warning
+    if state.no_progress_count >= 5:
+        text += (
+            f"\n\n⚠⚠⚠ STAGNATION ALERT: {state.no_progress_count} steps without progress! ⚠⚠⚠\n"
+            "Your current goal hypothesis has FAILED. You MUST change it.\n"
+            "Pick your best alternative goal and commit to it in updated_beliefs.\n"
+            "Also list what you tried that didn't work in failed_approaches."
+        )
+
     content.append({"type": "text", "text": text})
 
     if config.use_vision:
