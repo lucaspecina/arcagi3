@@ -323,14 +323,16 @@ def build_context_text(
     if state.no_progress_count >= 3:
         parts.append(f"⚠ NO PROGRESS for {state.no_progress_count} turns! Change approach!")
 
-    # Recent actions
+    # Structured action history (last 10 steps as table)
     if state.steps:
-        recent = state.steps[-5:]
-        history = " | ".join(
-            f"{s.action}({'ok' if s.state == 'IN_PROGRESS' else s.state})"
-            for s in recent
-        )
-        parts.append(f"Recent: {history}")
+        parts.append("\n=== ACTION HISTORY (most recent) ===")
+        parts.append("Step | Action  | Result      | What changed")
+        parts.append("-----|---------|-------------|---------------------------")
+        for s in state.steps[-10:]:
+            diff = s.diff_summary[:50] if s.diff_summary else "no data"
+            status = "ok" if s.state == "IN_PROGRESS" else s.state
+            parts.append(f" {s.action_num:>3} | {s.action:<7} | {status:<11} | {diff}")
+        parts.append("===")
 
     # Exploration controller report
     if exploration:
