@@ -261,14 +261,32 @@ def compute_diff(prev: np.ndarray, curr: np.ndarray) -> dict:
         "movements": movements,
     }
 
+    # Detect swaps: two objects that exchanged positions
+    swaps = _detect_swaps(movements)
+
+    result["swaps"] = swaps
+
     # Build human-readable description
     desc_parts = [f"{n_changed} pixels changed ({pct}% of grid)."]
-    for m in movements:
+
+    # Report swaps first (more informative than raw movements)
+    swap_colors = set()
+    for s in swaps:
         desc_parts.append(
-            f"{m['color_name']} object moved from ({m['from_x']},{m['from_y']}) "
-            f"to ({m['to_x']},{m['to_y']}), delta=({m['dx']},{m['dy']})."
+            f"SWAP: {s['color_a_name']} at ({s['pos_a_x']},{s['pos_a_y']}) ↔ "
+            f"{s['color_b_name']} at ({s['pos_b_x']},{s['pos_b_y']}) exchanged positions."
         )
-    if not movements and regions:
+        swap_colors.add(s["color_a"])
+        swap_colors.add(s["color_b"])
+
+    # Report non-swap movements
+    for m in movements:
+        if m["color"] not in swap_colors:
+            desc_parts.append(
+                f"{m['color_name']} object moved from ({m['from_x']},{m['from_y']}) "
+                f"to ({m['to_x']},{m['to_y']}), delta=({m['dx']},{m['dy']})."
+            )
+    if not movements and not swaps and regions:
         r = regions[0]
         desc_parts.append(
             f"Changes in area ({r['bbox'][0]},{r['bbox'][1]})-({r['bbox'][2]},{r['bbox'][3]}). "
@@ -327,6 +345,35 @@ def _detect_movements(prev: np.ndarray, curr: np.ndarray, diff_mask: np.ndarray)
                 })
 
     return movements
+
+
+def _detect_swaps(movements: list[dict]) -> list[dict]:
+    """Detect pairs of objects that exchanged positions (swaps)."""
+    swaps = []
+    used = set()
+    for i, a in enumerate(movements):
+        if i in used:
+            continue
+        for j, b in enumerate(movements):
+            if j <= i or j in used:
+                continue
+            # Check if A went to where B was and B went to where A was
+            if (a["from_x"] == b["to_x"] and a["from_y"] == b["to_y"]
+                    and a["to_x"] == b["from_x"] and a["to_y"] == b["from_y"]):
+                swaps.append({
+                    "color_a": a["color"],
+                    "color_a_name": a["color_name"],
+                    "color_b": b["color"],
+                    "color_b_name": b["color_name"],
+                    "pos_a_x": a["from_x"],
+                    "pos_a_y": a["from_y"],
+                    "pos_b_x": b["from_x"],
+                    "pos_b_y": b["from_y"],
+                })
+                used.add(i)
+                used.add(j)
+                break
+    return swaps
 
 
 def describe_frame(grid: np.ndarray) -> str:
