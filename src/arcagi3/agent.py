@@ -80,47 +80,67 @@ Respond with a JSON object:
 """
 
 # --- REFLECTOR PROMPT ---
+# This is the base prompt. The actual beliefs are injected dynamically
+# so the LLM must review each one individually.
 REFLECTOR_PROMPT = """\
-You are the REFLECTION module of an ARC-AGI-3 agent. Your job is MANDATORY \
-meta-cognition: validate every belief against new evidence.
+You are the REFLECTION module of an ARC-AGI-3 agent. You perform MANDATORY \
+meta-cognition after every single action.
 
-You just took an action and observed the result. You MUST now:
+## STEP 1: WHAT HAPPENED
+What exactly changed after this action? Be specific: which objects moved, \
+which pixels changed, which bars decreased, what appeared/disappeared.
 
-1. WHAT HAPPENED: What exactly changed? Be specific (objects moved, colors changed, \
-bars decreased, new objects appeared, etc.)
+## STEP 2: PREDICTION vs REALITY
+What did you predict? What actually happened? If different, explain WHY \
+your prediction was wrong.
 
-2. PREDICTION vs REALITY: What did you expect? What actually happened? \
-If they differ, WHY?
+## STEP 3: REVIEW EACH BELIEF (MANDATORY)
+Below you will see your current beliefs listed one by one.
+For EACH belief, you MUST provide:
+- VERDICT: KEEP (still true), CHANGE (partially wrong, here's the correction), \
+or DROP (completely wrong)
+- JUSTIFICATION: What specific evidence from THIS step supports your verdict? \
+If no new evidence, say so — but also say how many steps this belief has gone \
+unverified and whether you should test it.
 
-3. VALIDATE EACH BELIEF: Go through EVERY belief below and mark each one:
-   - CONFIRMED (evidence supports it)
-   - CONTRADICTED (evidence disproves it — explain why and what's correct)
-   - UNVERIFIED (no new evidence either way)
+You CANNOT skip any belief. Every single one needs a verdict + justification.
 
-4. NEW DISCOVERIES: Did this step reveal anything new? New objects, new mechanics, \
-new patterns?
+## STEP 4: NEW DISCOVERIES
+What did you learn that isn't captured in any existing belief?
 
-5. UPDATED BELIEFS: Output your COMPLETE updated belief set. Drop wrong beliefs. \
-Add new ones. Strengthen confirmed ones.
+## STEP 5: STRATEGY CHECK
+- Am I making PROGRESS toward the goal? (count steps without progress)
+- If NOT progressing: is my goal WRONG? List 2 alternative goal hypotheses.
+- What action sequence have I NOT tried that might reveal something new?
+- What is my BIGGEST uncertainty right now and how do I resolve it?
 
-Be BRUTALLY HONEST. If a belief was wrong, SAY SO and correct it. \
-Never keep a belief just because you stated it before.
+## STEP 6: UPDATED BELIEFS
+Output the COMPLETE updated belief set incorporating all changes from step 3-5.
 
-Respond with a JSON object:
+Respond with JSON:
 {
-  "what_happened": "specific description of what changed",
+  "what_happened": "specific changes observed",
   "prediction_vs_reality": "expected X, got Y, because Z",
-  "belief_validations": [
-    {"belief": "text", "status": "CONFIRMED|CONTRADICTED|UNVERIFIED", "evidence": "why"}
+  "belief_reviews": [
+    {"id": 0, "belief": "original text", "verdict": "KEEP|CHANGE|DROP", \
+"justification": "why, citing evidence from this step", "corrected": "new text if CHANGE"}
   ],
-  "new_discoveries": ["discovery 1", "discovery 2"],
+  "new_discoveries": ["discovery 1"],
+  "strategy_check": {
+    "making_progress": true/false,
+    "steps_without_progress": N,
+    "alternative_goals": ["if not progressing, 2 alternatives"],
+    "untried_sequences": ["action sequences not yet attempted"],
+    "biggest_uncertainty": "what I most need to figure out"
+  },
   "updated_beliefs": {
-    "controls": {"ACTION1": "effect (CONFIRMED/unverified/untested)", ...},
-    "rules": ["confirmed rule 1", ...],
-    "goal": "current hypothesis with confidence (low/medium/high)",
+    "controls": {"ACTION1": "observed effect (CONFIRMED/unverified/untested)", ...},
+    "rules": ["confirmed rule with evidence count"],
+    "goal": "hypothesis (confidence: low/medium/high, evidence: X)",
     "objects": ["object descriptions with locations"],
     "dangers": ["things that cause damage or game over"],
-    "unknowns": ["things I still need to test or understand"]
+    "unknowns": ["things I still need to test"],
+    "failed_approaches": ["what I tried that didn't work and why"]
   }
 }
 """
@@ -133,17 +153,18 @@ You are the ACTION module of an ARC-AGI-3 agent. You receive VALIDATED beliefs \
 RULES:
 - EFFICIENCY MATTERS: score = (human_actions/your_actions)². Fewer = better.
 - TRUST YOUR BELIEFS: they were just validated by the reflector. Act on them.
-- If there are UNTESTED actions, test them — one at a time.
-- Do NOT repeat the same action more than 2 times in a row unless you have strong reason.
-- If stuck 3+ turns, CHANGE APPROACH completely.
-- Navigate toward identified targets when you have a goal hypothesis.
+- If there are UNTESTED actions, prioritize testing them — one at a time.
+- NEVER repeat a failed approach. Check "failed_approaches" in your beliefs.
+- If the same action had no effect, DO NOT try it again from the same position.
+- If stuck, try a COMPLETELY DIFFERENT action or sequence.
+- Be SPECIFIC in expected_result — the reflector will check your prediction.
 
 Respond with a JSON object:
 {
   "reasoning": "Why this action, based on validated beliefs",
   "action": "ACTION1|...|ACTION7|RESET",
   "x": 0, "y": 0,
-  "expected_result": "What I expect to see — be SPECIFIC so reflector can check"
+  "expected_result": "SPECIFIC prediction: what object moves where, what changes"
 }
 
 "x" and "y" are ONLY for ACTION6. Keep reasoning SHORT and focused.
@@ -370,6 +391,59 @@ def run_analyzer(
     return analysis
 
 
+def _enumerate_beliefs(memory_json: str) -> str:
+    """Flatten beliefs into a numbered list so the LLM must address each one."""
+    try:
+        beliefs = json.loads(memory_json)
+    except (json.JSONDecodeError, TypeError):
+        return f"[0] {memory_json}"
+
+    items = []
+    idx = 0
+
+    # Controls
+    controls = beliefs.get("controls", {})
+    if isinstance(controls, dict):
+        for action, effect in controls.items():
+            items.append(f"[{idx}] CONTROL: {action} → {effect}")
+            idx += 1
+
+    # Rules
+    for rule in beliefs.get("rules", []):
+        items.append(f"[{idx}] RULE: {rule}")
+        idx += 1
+
+    # Goal
+    goal = beliefs.get("goal", "")
+    if goal:
+        items.append(f"[{idx}] GOAL: {goal}")
+        idx += 1
+
+    # Objects
+    for obj in beliefs.get("objects", []):
+        items.append(f"[{idx}] OBJECT: {obj}")
+        idx += 1
+
+    # Dangers
+    for danger in beliefs.get("dangers", []):
+        items.append(f"[{idx}] DANGER: {danger}")
+        idx += 1
+
+    # Unknowns
+    for unk in beliefs.get("unknowns", []):
+        items.append(f"[{idx}] UNKNOWN: {unk}")
+        idx += 1
+
+    # Failed approaches
+    for fa in beliefs.get("failed_approaches", []):
+        items.append(f"[{idx}] FAILED: {fa}")
+        idx += 1
+
+    if not items:
+        return "(no beliefs yet)"
+    return "\n".join(items)
+
+
 def run_reflector(
     client,
     grid: np.ndarray,
@@ -385,14 +459,16 @@ def run_reflector(
     """Run the REFLECTOR to validate beliefs against new evidence."""
     context = build_context_text(grid, state, config, avatar_tracker, bar_tracker, exploration)
 
+    # Enumerate beliefs as numbered list
+    belief_list = _enumerate_beliefs(state.memory) if state.memory else "(no beliefs yet — first step)"
+
     content = []
-    text = f"You just performed: {last_action}\n"
-    text += f"You expected: {expected_result}\n\n"
+    text = f"ACTION TAKEN: {last_action}\n"
+    text += f"YOUR PREDICTION: {expected_result}\n\n"
     text += context
     if analysis:
         text += f"\n\n=== PERCEPTION ===\n{analysis}\n==="
-    if state.memory:
-        text += f"\n\n=== YOUR CURRENT BELIEFS (validate each one!) ===\n{state.memory}\n==="
+    text += f"\n\n=== YOUR BELIEFS — Review EACH one. Verdict + justification required ===\n{belief_list}\n==="
     content.append({"type": "text", "text": text})
 
     if config.use_vision:
@@ -412,7 +488,7 @@ def run_reflector(
             model=config.model,
             messages=messages,
             temperature=0.3,
-            max_completion_tokens=1500,
+            max_completion_tokens=2000,
             timeout=120,
         )
         reflection = response.choices[0].message.content or ""
@@ -752,18 +828,32 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         )
         reflection_parsed = parse_response(reflection)
 
-        # Print belief changes
-        validations = reflection_parsed.get("belief_validations", [])
-        contradicted = [v for v in validations if v.get("status") == "CONTRADICTED"]
-        confirmed = [v for v in validations if v.get("status") == "CONFIRMED"]
+        # Print belief reviews
+        reviews = reflection_parsed.get("belief_reviews", [])
+        kept = [r for r in reviews if r.get("verdict") == "KEEP"]
+        changed = [r for r in reviews if r.get("verdict") == "CHANGE"]
+        dropped = [r for r in reviews if r.get("verdict") == "DROP"]
         new_disc = reflection_parsed.get("new_discoveries", [])
-        print(f"  [REFLECTOR] {len(confirmed)} confirmed, {len(contradicted)} contradicted, {len(new_disc)} new")
-        if contradicted:
-            for v in contradicted:
-                print(f"    ✗ WRONG: {v.get('belief', '?')[:80]} → {v.get('evidence', '?')[:80]}")
+        print(f"  [REFLECTOR] {len(kept)} kept, {len(changed)} changed, {len(dropped)} dropped, {len(new_disc)} new")
+        for r in changed:
+            print(f"    ~ CHANGED: {r.get('belief', '?')[:60]} → {r.get('corrected', '?')[:60]}")
+        for r in dropped:
+            print(f"    ✗ DROPPED: {r.get('belief', '?')[:80]} — {r.get('justification', '?')[:60]}")
         if new_disc:
             for d in new_disc[:3]:
                 print(f"    ★ NEW: {d[:100]}")
+        strategy = reflection_parsed.get("strategy_check", {})
+        if isinstance(strategy, dict):
+            prog = strategy.get("making_progress", "?")
+            stale = strategy.get("steps_without_progress", "?")
+            unc = strategy.get("biggest_uncertainty", "")
+            print(f"  [STRATEGY] Progress: {prog} | Stale: {stale} steps | Uncertainty: {unc[:100]}")
+            alts = strategy.get("alternative_goals", [])
+            if alts and not prog:
+                for a in alts[:2]:
+                    print(f"    ? ALT GOAL: {a[:100]}")
+        elif isinstance(strategy, str) and strategy:
+            print(f"  [STRATEGY] {strategy[:150]}")
         # Print current beliefs summary
         if state.memory:
             try:
