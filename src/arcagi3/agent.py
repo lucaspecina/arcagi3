@@ -1,4 +1,10 @@
-"""LLM Agent for ARC-AGI-3 using Azure AI Foundry."""
+"""LLM Agent for ARC-AGI-3 using Azure AI Foundry.
+
+Architecture: Analyzer-Actor split.
+- Analyzer: focused perception (what do I control, what are resources, what's the goal?)
+- Actor: picks the best action based on the analysis
+- Trackers: deterministic avatar/bar detection
+"""
 
 import json
 import os
@@ -11,14 +17,18 @@ from arcengine import GameAction, GameState
 from PIL import Image
 
 from .grid_utils import (
+    compute_diff,
+    describe_frame,
+    grid_hash,
     grid_to_base64,
     grid_to_image,
     grid_to_text_compact,
-    image_diff,
     image_to_base64,
 )
+from .exploration import ExplorationController
+from .trackers import AvatarTracker, BarTracker
 
-# Map action names to GameAction enum — actions are GENERIC, semantics are game-specific
+# Map action names to GameAction enum
 ACTION_MAP = {
     "RESET": GameAction.RESET,
     "ACTION1": GameAction.ACTION1,
@@ -30,122 +40,79 @@ ACTION_MAP = {
     "ACTION7": GameAction.ACTION7,
 }
 
-# Human-readable labels for display only
 ACTION_LABELS = {
     "RESET": "RESET",
     "ACTION1": "A1", "ACTION2": "A2", "ACTION3": "A3", "ACTION4": "A4",
     "ACTION5": "A5", "ACTION6": "A6(click)", "ACTION7": "A7",
 }
 
-SYSTEM_PROMPT = """\
-You are playing an ARC-AGI-3 game — an abstract visual puzzle on a 64x64 grid \
-with 16 colors. Each game has multiple levels.
+# --- ANALYZER PROMPT ---
+ANALYZER_PROMPT = """\
+You are analyzing a frame from an ARC-AGI-3 game — a 64x64 abstract visual puzzle.
+Your job is ONLY to perceive and interpret. You do NOT choose actions.
 
-THE CHALLENGE: You have NO instructions. You must discover through experimentation:
-  1. CONTROLS — What does each action do? Actions are GENERIC (ACTION1-7). Their \
-meaning changes per game. You must test each one to learn what it does.
-  2. RULES — What are the mechanics? What objects exist? How do they interact?
-  3. GOAL — What triggers level completion? You must infer it.
+The harness provides you with:
+- The current frame (image)
+- Programmatic diff (exact pixel changes, object movements)
+- Tracker data (avatar detection, resource bar warnings)
+- Your previous analysis (if any)
 
-## What you see
-A 64x64 colored grid (16 colors, values 0-15). Objects are patterns of colored \
-pixels. You may control something on the grid — you must figure out what.
+Answer these questions precisely:
 
-## Actions
-Actions are ABSTRACT and GAME-SPECIFIC. Do NOT assume what they do.
-- ACTION1 through ACTION5 — simple actions (no parameters). Could be movement, \
-interaction, selection, rotation — anything. You must test to find out.
-- ACTION6 x,y — positional action (click/place at grid coordinate 0-63).
-- ACTION7 — typically undo, but verify.
-- RESET — restart current level.
+1. CONTROLLED OBJECT: What object do you control? What color/shape is it? Where is it now?
+2. RESOURCE INDICATORS: Are there bars, counters, or indicators? Which are health/cost vs progress?
+3. SALIENT TARGETS: What objects look like goals, pickups, or interactive elements? Where?
+4. SPATIAL LAYOUT: Describe the layout — walls, paths, rooms, doors, connections.
+5. CURRENT HYPOTHESIS: What do you think the goal is? What evidence supports this?
+6. CONTRADICTIONS: Does anything contradict your previous analysis? What needs revision?
 
-Each turn you will be told which actions are currently available. Only choose \
-from those.
-
-## How to think
-
-FIRST TURN: Study the grid carefully. Identify distinct objects, colors, regions. \
-Form a hypothesis. Then test ONE action to learn what it does.
-
-EVERY TURN:
-- OBSERVE: Look at the ACTUAL grid. What SPECIFICALLY changed? Compare pixel by \
-pixel with what you expected. Do NOT rely on your memory of what you think the \
-grid looks like — LOOK at what is actually there.
-- VERIFY: Does what just happened MATCH what your memory says this action does? \
-If ACTION1 is recorded as "moves up" but the object moved DOWN, your memory is \
-WRONG. Fix it immediately. Your memory is full of hypotheses, not facts.
-- REASON: What rules/mechanics does this reveal? What assumptions should you revise?
-- PLAN: What should you try next and why?
-
-## CRITICAL: Your memory is NOT truth — it's hypotheses
-
-YOUR MEMORY CAN BE WRONG. Treat every entry as a hypothesis that needs constant \
-verification, not as established fact.
-
-EVERY FEW TURNS, actively challenge your own beliefs:
-- "I wrote that ACTION1 moves up — is that ACTUALLY what I'm seeing?"
-- "I assumed the blue object is my avatar — what if it's not?"
-- "I think the goal is X — but what evidence do I ACTUALLY have?"
-
-If your actions are not producing the expected results, the FIRST thing to \
-suspect is that your memory is wrong. Re-test your assumptions. The grid is \
-the ground truth, not your notes.
-
-Common traps:
-- Writing down a control mapping wrong on the first test and never questioning it
-- Assuming you know what an object is without verifying
-- Continuing a failing plan because your memory says it should work
-- Not noticing that the grid contradicts your beliefs
-
-## Strategy
-- Level 1 is a tutorial — it teaches basic mechanics. Pay close attention.
-- Be SYSTEMATIC: test each available action once early on to map controls.
-- Track what changed after each action — that's your primary learning signal.
-- VERIFY your control mappings: if you think ACTION1=up, move and CHECK that \
-the object actually moved up. If it didn't, CORRECT your memory immediately.
-- If stuck for several turns, STOP. Re-read your memory critically. Is something \
-wrong in your assumptions? Re-test from scratch if needed.
-- If things keep not working as expected, RESET and question EVERYTHING.
-- EFFICIENCY MATTERS: your score penalizes wasted actions quadratically.
-
-## Human observer
-A human observer may provide comments or hints between turns.
-
-## Persistent memory
-You have a memory dict that persists across ALL turns (even when old messages \
-are dropped). You MUST update it every turn.
-
-## Response format
 Respond with a JSON object:
 {
-  "reasoning": "OBSERVE what actually happened, VERIFY against memory, PLAN next steps",
-  "action": "ACTION1|ACTION2|ACTION3|ACTION4|ACTION5|ACTION6|ACTION7|RESET",
-  "x": 0,
-  "y": 0,
+  "controlled_object": "description of what you control and where it is",
+  "resource_bars": ["bar description and whether it's health/cost or progress"],
+  "targets": ["potential goal/interactive objects with locations"],
+  "layout": "spatial description of the level",
+  "goal_hypothesis": "what you think wins the level, with evidence",
+  "contradictions": "what changed or was wrong in previous analysis",
+  "confidence": "low|medium|high"
+}
+"""
+
+# --- ACTOR PROMPT ---
+ACTOR_PROMPT = """\
+You are the ACTION module of an ARC-AGI-3 agent. You receive a perception analysis \
+and choose the BEST next action.
+
+RULES:
+- EFFICIENCY MATTERS: score = (human_actions/your_actions)². Fewer = better.
+- If there are UNTESTED actions, test them first — one at a time.
+- Do NOT repeat the same action more than 2 times in a row unless you have strong reason.
+- Consuming a resource bar is COST, not progress. Do NOT optimize for depleting bars.
+- If stuck 3+ turns, CHANGE APPROACH completely.
+- Navigate toward identified targets when you have a goal hypothesis.
+
+PHASE GUIDE:
+- DISCOVER: Test each action once. Record effects.
+- PROBE: Interact with objects. Test hypotheses about goals.
+- PURSUE: Execute a plan toward the goal.
+
+Respond with a JSON object:
+{
+  "reasoning": "Why this action, based on the analysis",
+  "action": "ACTION1|...|ACTION7|RESET",
+  "x": 0, "y": 0,
+  "expected_result": "What I expect to see after this action",
+  "phase": "discover|probe|pursue",
   "memory": {
-    "controls": {"ACTION1": "what it does (VERIFIED/unverified)", ...},
-    "rules": ["confirmed rule 1", "confirmed rule 2"],
-    "goal": "current hypothesis about win condition",
-    "map": "layout description: objects, colors, positions",
-    "plan": "current strategy and next steps",
+    "controls": {"ACTION1": "effect (VERIFIED/unverified/untested)", ...},
+    "rules": ["confirmed rule 1", ...],
+    "goal": "current hypothesis",
+    "plan": "current strategy",
     "level": 1,
     "deaths": 0,
-    "lessons": ["what I learned from each death/failure"]
+    "lessons": ["key learnings"]
   }
 }
-
-Memory rules:
-- ALWAYS include and update memory every turn.
-- "controls": map each action to observed effect. Mark as VERIFIED only after \
-you've confirmed it multiple times. Mark untested as "untested", unconfirmed \
-as "unverified: seems to do X".
-- "rules": only confirmed mechanics. Remove rules that turn out to be wrong.
-- "goal": best hypothesis with evidence. Note confidence level.
-- "map": spatial layout, key objects and their positions.
-- "plan": step-by-step strategy. Update when plan changes.
-- "level": current level number.
-- "deaths": how many times you've died (GAME_OVER). Learn from each one.
-- "lessons": key learnings from failures. What went wrong and what to do differently.
 
 "x" and "y" are ONLY for ACTION6.
 """
@@ -169,6 +136,7 @@ class AgentConfig:
     step_mode: bool = False
     show_raw_prompt: bool = False
     show_window: bool = False
+    analyze_every: int = 3  # Run analyzer every N steps (1 = every step)
 
     def __post_init__(self):
         if not self.base_url:
@@ -190,6 +158,7 @@ class StepRecord:
     reasoning: str = ""
     state: str = ""
     levels_completed: int = 0
+    diff_summary: str = ""
 
 
 @dataclass
@@ -202,6 +171,15 @@ class AgentState:
     memory: str = ""
     human_feedback: str = ""
     available_actions: list[int] = field(default_factory=list)
+    # Harness-tracked state
+    state_hashes: set = field(default_factory=set)
+    actions_tested: set = field(default_factory=set)
+    no_progress_count: int = 0
+    frame_analysis: str = ""
+    diff_text: str = ""
+    # Analyzer state
+    last_analysis: str = ""
+    analysis_history: list[str] = field(default_factory=list)
 
 
 def create_client(config: AgentConfig):
@@ -209,43 +187,11 @@ def create_client(config: AgentConfig):
     from openai import OpenAI
 
     if not config.base_url:
-        raise ValueError(
-            "Set AZURE_FOUNDRY_ENDPOINT env var or pass base_url. "
-            "Example: https://your-resource.openai.azure.com/openai/v1/"
-        )
+        raise ValueError("Set AZURE_FOUNDRY_ENDPOINT env var or pass base_url.")
     if not config.api_key:
-        raise ValueError(
-            "Set AZURE_INFERENCE_CREDENTIAL env var or pass api_key."
-        )
+        raise ValueError("Set AZURE_INFERENCE_CREDENTIAL env var or pass api_key.")
 
     return OpenAI(base_url=config.base_url, api_key=config.api_key)
-
-
-def print_raw_prompt(messages: list[dict]) -> None:
-    """Print the raw prompt exactly as it would be sent to the model."""
-    sep = "=" * 80
-    print(f"\n{sep}")
-    print("RAW PROMPT TO MODEL")
-    print(sep)
-    for msg in messages:
-        role = msg["role"].upper()
-        print(f"\n{'─' * 35} {role} {'─' * 35}")
-        content = msg["content"]
-        if isinstance(content, str):
-            print(content)
-        elif isinstance(content, list):
-            for part in content:
-                if part["type"] == "text":
-                    print(part["text"])
-                elif part["type"] == "image_url":
-                    url = part["image_url"]["url"]
-                    if url.startswith("data:image"):
-                        b64_data = url.split(",", 1)[1] if "," in url else url
-                        size_kb = len(b64_data) * 3 // 4 // 1024
-                        print(f"  [IMAGE: base64 PNG, ~{size_kb}KB]")
-                    else:
-                        print(f"  [IMAGE: {url}]")
-    print(f"\n{sep}\n")
 
 
 def prompt_human(prompt_text: str) -> str | None:
@@ -259,57 +205,155 @@ def prompt_human(prompt_text: str) -> str | None:
         return None
 
 
-def build_user_message(
+def build_context_text(
     grid: np.ndarray,
-    prev_grid: np.ndarray | None,
     state: AgentState,
     config: AgentConfig,
-) -> dict:
-    """Build the user message with current observation."""
-    content = []
-
-    # Text description of state
-    text_parts = []
-    text_parts.append(f"Step {len(state.steps) + 1}/{config.max_actions}")
+    avatar_tracker: AvatarTracker,
+    bar_tracker: BarTracker,
+    exploration: ExplorationController | None = None,
+) -> str:
+    """Build the context text block shared by both analyzer and actor."""
+    parts = []
+    parts.append(f"Step {len(state.steps) + 1}/{config.max_actions}")
 
     if state.steps:
         last = state.steps[-1]
-        text_parts.append(f"Last action: {last.action} -> {last.state}")
-        text_parts.append(f"Levels completed: {last.levels_completed}")
+        parts.append(f"Last action: {last.action} -> {last.state}")
+        parts.append(f"Levels completed: {last.levels_completed}")
 
-    # Available actions from the environment
+    # Available actions
     if state.available_actions:
         action_names = []
         for aid in state.available_actions:
-            name = f"ACTION{aid}"
-            if aid == 0:
-                name = "RESET"
+            name = f"ACTION{aid}" if aid != 0 else "RESET"
             action_names.append(name)
-        # Always include RESET as an option
         if "RESET" not in action_names:
             action_names.append("RESET")
-        text_parts.append(f"Available actions: {', '.join(action_names)}")
+        parts.append(f"Available actions: {', '.join(action_names)}")
 
-    # Recent action history (last 5)
+        untested = [n for n in action_names if n not in state.actions_tested and n != "RESET"]
+        if untested:
+            parts.append(f"⚠ UNTESTED actions: {', '.join(untested)}")
+
+    # Programmatic diff
+    if state.diff_text:
+        parts.append(f"\n=== DIFF (computed, accurate) ===\n{state.diff_text}\n===")
+
+    # Avatar tracker
+    avatar_info = avatar_tracker.get_avatar_info()
+    if avatar_info:
+        parts.append(f"\n=== AVATAR TRACKER ===\n{avatar_info}")
+        action_map = avatar_tracker.get_action_map()
+        if action_map:
+            parts.append("Action → Effect mapping:")
+            for a, desc in action_map.items():
+                parts.append(f"  {a}: {desc}")
+        parts.append("===")
+
+    # Bar tracker warnings
+    bar_warnings = bar_tracker.get_bar_warnings()
+    if bar_warnings:
+        parts.append(f"\n=== BAR TRACKER ===\n{bar_warnings}\n===")
+
+    # Frame analysis
+    if state.frame_analysis:
+        parts.append(f"\n=== FRAME OBJECTS ===\n{state.frame_analysis}\n===")
+
+    # State novelty
+    current_hash = grid_hash(grid)
+    is_novel = current_hash not in state.state_hashes
+    parts.append(f"State: {'NEW' if is_novel else 'REPEATED'}")
+    if state.no_progress_count >= 3:
+        parts.append(f"⚠ NO PROGRESS for {state.no_progress_count} turns! Change approach!")
+
+    # Recent actions
     if state.steps:
         recent = state.steps[-5:]
         history = " | ".join(
             f"{s.action}({'ok' if s.state == 'IN_PROGRESS' else s.state})"
             for s in recent
         )
-        text_parts.append(f"Recent: {history}")
+        parts.append(f"Recent: {history}")
 
-    # Agent memory/scratchpad — persists even when old messages are dropped
-    if state.memory:
-        text_parts.append(f"\n=== YOUR SCRATCHPAD (persists across turns) ===\n{state.memory}\n===")
+    # Exploration controller report
+    if exploration:
+        report = exploration.get_exploration_report()
+        if report:
+            parts.append(f"\n=== EXPLORATION CONTROLLER ===\n{report}\n===")
 
-    # Human observer feedback
+    # Human feedback
     if state.human_feedback:
-        text_parts.append(f"\n=== HUMAN OBSERVER ===\n{state.human_feedback}\n===")
+        parts.append(f"\n=== HUMAN OBSERVER ===\n{state.human_feedback}\n===")
 
-    content.append({"type": "text", "text": "\n".join(text_parts)})
+    return "\n".join(parts)
 
-    # Vision: current frame image
+
+def run_analyzer(
+    client,
+    grid: np.ndarray,
+    state: AgentState,
+    config: AgentConfig,
+    avatar_tracker: AvatarTracker,
+    bar_tracker: BarTracker,
+    exploration: ExplorationController | None = None,
+) -> str:
+    """Run the ANALYZER to perceive and interpret the current state."""
+    context = build_context_text(grid, state, config, avatar_tracker, bar_tracker, exploration)
+
+    content = []
+    text = context
+    if state.last_analysis:
+        text += f"\n\n=== YOUR PREVIOUS ANALYSIS ===\n{state.last_analysis}\n==="
+    content.append({"type": "text", "text": text})
+
+    # Add image
+    if config.use_vision:
+        b64 = grid_to_base64(grid, scale=2)
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
+        })
+
+    messages = [
+        {"role": "system", "content": ANALYZER_PROMPT},
+        {"role": "user", "content": content},
+    ]
+
+    response = client.chat.completions.create(
+        model=config.model,
+        messages=messages,
+        temperature=0.3,  # Lower temp for perception accuracy
+        max_completion_tokens=1000,
+    )
+
+    analysis = response.choices[0].message.content or ""
+    state.last_analysis = analysis
+    state.analysis_history.append(analysis)
+    return analysis
+
+
+def run_actor(
+    client,
+    grid: np.ndarray,
+    state: AgentState,
+    config: AgentConfig,
+    analysis: str,
+    avatar_tracker: AvatarTracker,
+    bar_tracker: BarTracker,
+    exploration: ExplorationController | None = None,
+) -> tuple[GameAction, dict | None, str, dict]:
+    """Run the ACTOR to choose the next action based on analysis."""
+    context = build_context_text(grid, state, config, avatar_tracker, bar_tracker, exploration)
+
+    content = []
+    text = context
+    text += f"\n\n=== ANALYZER OUTPUT ===\n{analysis}\n==="
+    if state.memory:
+        text += f"\n\n=== YOUR MEMORY ===\n{state.memory}\n==="
+    content.append({"type": "text", "text": text})
+
+    # Add image for spatial reference
     if config.use_vision:
         b64 = grid_to_base64(grid, scale=2)
         content.append({
@@ -317,30 +361,52 @@ def build_user_message(
             "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "low"},
         })
 
-        # Diff image if we have a previous frame
-        if prev_grid is not None:
-            diff_img = image_diff(prev_grid, grid, scale=2)
-            diff_b64 = image_to_base64(diff_img)
-            content.append({"type": "text", "text": "Changes since last step (bright = changed):"})
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{diff_b64}", "detail": "low"},
-            })
+    # Build actor messages with history
+    messages = [{"role": "system", "content": ACTOR_PROMPT}]
+    history_start = max(0, len(state.messages) - config.message_history_limit * 2)
+    messages.extend(state.messages[history_start:])
+    messages.append({"role": "user", "content": content})
 
-    # Text: compact grid representation
-    if config.use_text and not config.use_vision:
-        text_grid = grid_to_text_compact(grid)
-        content.append({
-            "type": "text",
-            "text": f"Grid (hex, 0-f = 16 colors):\n{text_grid}",
-        })
+    response = client.chat.completions.create(
+        model=config.model,
+        messages=messages,
+        temperature=config.temperature,
+        max_completion_tokens=1000,
+    )
 
-    return {"role": "user", "content": content}
+    reply_text = response.choices[0].message.content or ""
+    parsed = parse_response(reply_text)
+
+    # Store actor exchange in history
+    state.messages.append({"role": "user", "content": content})
+    state.messages.append({"role": "assistant", "content": reply_text})
+
+    # Update memory
+    if "memory" in parsed:
+        mem = parsed["memory"]
+        if isinstance(mem, dict):
+            state.memory = json.dumps(mem, indent=2)
+        else:
+            state.memory = str(mem)
+
+    # Map to GameAction
+    action_name = parsed.get("action", "ACTION1").upper()
+    game_action = ACTION_MAP.get(action_name, GameAction.ACTION1)
+    state.actions_tested.add(action_name)
+
+    # Prepare data for ACTION6
+    data = None
+    if game_action == GameAction.ACTION6:
+        x = int(parsed.get("x", 32))
+        y = int(parsed.get("y", 32))
+        data = {"x": max(0, min(63, x)), "y": max(0, min(63, y))}
+
+    reasoning = parsed.get("reasoning", reply_text[:200])
+    return game_action, data, reasoning, parsed
 
 
 def parse_response(text: str) -> dict:
-    """Extract JSON action from LLM response text, supporting nested objects."""
-    # Try to find the outermost JSON object using balanced braces
+    """Extract JSON action from LLM response text."""
     start = text.find("{")
     if start != -1:
         depth = 0
@@ -355,13 +421,11 @@ def parse_response(text: str) -> dict:
                     except json.JSONDecodeError:
                         break
 
-    # Fallback: try parsing the whole response
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Last resort: extract action keyword
     text_upper = text.upper()
     for action_name in ["RESET", "ACTION7", "ACTION6", "ACTION5", "ACTION4", "ACTION3", "ACTION2", "ACTION1"]:
         if action_name in text_upper:
@@ -370,70 +434,11 @@ def parse_response(text: str) -> dict:
     return {"action": "ACTION1", "reasoning": f"Failed to parse: {text[:200]}"}
 
 
-def choose_action(
-    client,
-    grid: np.ndarray,
-    state: AgentState,
-    config: AgentConfig,
-) -> tuple[GameAction, dict | None, str]:
-    """Ask the LLM to choose an action."""
-    user_msg = build_user_message(grid, state.prev_grid, state, config)
-
-    # Clear human feedback after it's been included in the message
-    state.human_feedback = ""
-
-    # Build messages: system + recent history + current
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Add recent message history (keep it bounded)
-    history_start = max(0, len(state.messages) - config.message_history_limit * 2)
-    messages.extend(state.messages[history_start:])
-    messages.append(user_msg)
-
-    # Show raw prompt on first call (always in step mode, or if --raw)
-    if (config.show_raw_prompt or config.step_mode) and len(state.steps) == 0:
-        print_raw_prompt(messages)
-
-    response = client.chat.completions.create(
-        model=config.model,
-        messages=messages,
-        temperature=config.temperature,
-        max_completion_tokens=1500,
-    )
-
-    reply_text = response.choices[0].message.content or ""
-    parsed = parse_response(reply_text)
-
-    # Store in message history
-    state.messages.append(user_msg)
-    state.messages.append({"role": "assistant", "content": reply_text})
-
-    # Update agent memory if provided
-    if "memory" in parsed:
-        mem = parsed["memory"]
-        if isinstance(mem, dict):
-            state.memory = json.dumps(mem, indent=2)
-        else:
-            state.memory = str(mem)
-
-    # Map to GameAction
-    action_name = parsed.get("action", "INTERACT").upper()
-    game_action = ACTION_MAP.get(action_name, GameAction.ACTION5)
-
-    # Prepare data for CLICK
-    data = None
-    if game_action == GameAction.ACTION6:
-        x = int(parsed.get("x", 32))
-        y = int(parsed.get("y", 32))
-        data = {"x": max(0, min(63, x)), "y": max(0, min(63, y))}
-
-    reasoning = parsed.get("reasoning", reply_text[:200])
-    return game_action, data, reasoning, parsed
-
-
 def format_memory(mem: dict) -> str:
-    """Format the agent memory dict for human-readable terminal output."""
+    """Format the agent memory dict for terminal output."""
     lines = []
+    if "phase" in mem:
+        lines.append(f"  Phase: {mem['phase']}")
     if "controls" in mem and isinstance(mem["controls"], dict):
         lines.append("  Controls:")
         for k, v in mem["controls"].items():
@@ -445,8 +450,6 @@ def format_memory(mem: dict) -> str:
             lines.append(f"    - {r}")
     if "goal" in mem:
         lines.append(f"  Goal: {mem['goal']}")
-    if "map" in mem:
-        lines.append(f"  Map: {mem['map']}")
     if "plan" in mem:
         lines.append(f"  Plan: {mem['plan']}")
     if "level" in mem:
@@ -501,24 +504,25 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
     client = create_client(config)
     state = AgentState()
+    avatar_tracker = AvatarTracker()
+    bar_tracker = BarTracker()
+    exploration = ExplorationController()
     saved_frames: list[Image.Image] = []
     display = None
 
-    # Set up live display window
     if config.show_window:
         try:
             display = LiveDisplay()
         except Exception as e:
             print(f"  WARNING: Could not open display window: {e}")
 
-    # Set up frame saving
     if config.save_frames:
         from pathlib import Path
         frames_path = Path(config.frames_dir)
         frames_path.mkdir(parents=True, exist_ok=True)
         print(f"  Saving frames to: {frames_path.resolve()}")
 
-    # Get initial observation
+    # Initial observation
     obs = env.reset()
     if obs is None or not obs.frame:
         print("ERROR: No initial observation from environment")
@@ -526,21 +530,23 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
     grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
 
-    # Track available actions from the environment
     if hasattr(obs, "available_actions") and obs.available_actions:
         state.available_actions = list(obs.available_actions)
 
-    # Show initial frame
+    # Initial analysis
+    state.frame_analysis = describe_frame(grid)
+    state.diff_text = "First frame — no previous frame to compare."
+    state.state_hashes.add(grid_hash(grid))
+    bar_tracker.update(grid, 0)
+
     if display:
         display.update(grid, "Initial observation")
 
-    # Save initial frame
     if config.save_frames:
         img = grid_to_image(grid, scale=4)
         img.save(frames_path / "step_000_initial.png")
         saved_frames.append(img.copy())
 
-    # Interactive: prompt human before first action
     if config.step_mode:
         feedback = prompt_human("Comment/question before first action")
         if feedback is None:
@@ -549,24 +555,45 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         if feedback:
             state.human_feedback = feedback
 
+    # Run initial analyzer
+    print("\n  [ANALYZER] Running initial perception...")
+    analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
+    print(f"  [ANALYZER] {analysis[:300]}...")
+
     for step_num in range(config.max_actions):
-        # Ask LLM for action
-        game_action, data, reasoning, parsed = choose_action(client, grid, state, config)
+        # Run analyzer periodically or on important events
+        should_analyze = (
+            step_num > 0 and (
+                step_num % config.analyze_every == 0
+                or state.no_progress_count >= 3
+                or (state.steps and state.steps[-1].state == "GAME_OVER")
+            )
+        )
+        if should_analyze:
+            print(f"\n  [ANALYZER] Re-analyzing (step {step_num + 1})...")
+            analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
+            print(f"  [ANALYZER] {analysis[:200]}...")
+
+        # Run actor
+        game_action, data, reasoning, parsed = run_actor(
+            client, grid, state, config, analysis, avatar_tracker, bar_tracker, exploration
+        )
 
         action_name = game_action.name
         label = ACTION_LABELS.get(action_name, action_name)
         coords = f" x={data['x']},y={data['y']}" if data else ""
 
-        # Display step info
+        # Display step
         sep = "─" * 60
         print(f"\n{sep}")
         print(f"  Step {step_num + 1}/{config.max_actions}")
         print(sep)
-        print(f"\n  Reasoning:\n    {reasoning}\n")
+        print(f"  Reasoning: {reasoning}")
+        if parsed.get("expected_result"):
+            print(f"  Expected: {parsed['expected_result']}")
         print(f"  Action: >>> {label}{coords}")
         if "memory" in parsed and isinstance(parsed["memory"], dict):
             print(f"\n  Memory:\n{format_memory(parsed['memory'])}")
-        print()
 
         # Execute action
         obs = env.step(game_action, data=data or {})
@@ -574,6 +601,62 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         if obs is None:
             print("  WARNING: No observation returned")
             continue
+
+        # Update grid
+        state.prev_grid = grid
+        if obs.frame:
+            grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
+        if hasattr(obs, "available_actions") and obs.available_actions:
+            state.available_actions = list(obs.available_actions)
+
+        # HARNESS INTELLIGENCE
+        diff_result = compute_diff(state.prev_grid, grid)
+        state.diff_text = diff_result["description"]
+        state.frame_analysis = describe_frame(grid)
+
+        # Update trackers
+        avatar_tracker.update(action_name, diff_result)
+        bar_tracker.update(grid, step_num + 1)
+
+        # Update exploration controller
+        movements = diff_result.get("movements", [])
+        avatar_pos = None
+        prev_avatar_pos = None
+        if avatar_tracker.avatar_candidate:
+            ac = avatar_tracker.avatar_candidate["color"]
+            for m in movements:
+                if m["color"] == ac:
+                    avatar_pos = (m["to_x"], m["to_y"])
+                    prev_avatar_pos = (m["from_x"], m["from_y"])
+                    break
+        # Get health bar length for controller
+        health_len = None
+        if bar_tracker.detected_bars:
+            health_len = bar_tracker.detected_bars[0].get("current_length")
+        exploration.update(action_name, avatar_pos, prev_avatar_pos, movements, health_len)
+
+        # State novelty
+        h = grid_hash(grid)
+        is_novel = h not in state.state_hashes
+        state.state_hashes.add(h)
+
+        if is_novel or diff_result.get("changed_cells", 0) > 0:
+            state.no_progress_count = 0
+        else:
+            state.no_progress_count += 1
+
+        # Print harness info
+        print(f"\n  Diff: {state.diff_text}")
+        avatar_info = avatar_tracker.get_avatar_info()
+        if avatar_info:
+            print(f"  Avatar: {avatar_info}")
+        bar_warn = bar_tracker.get_bar_warnings()
+        if bar_warn:
+            print(f"  Bar: {bar_warn}")
+        explore_report = exploration.get_exploration_report()
+        if explore_report:
+            print(f"  Explore: {explore_report}")
+        print(f"  State: {'NEW' if is_novel else 'REPEATED'} | No-progress: {state.no_progress_count}")
 
         # Record step
         record = StepRecord(
@@ -584,28 +667,20 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             reasoning=reasoning,
             state=obs.state.name if obs.state else "UNKNOWN",
             levels_completed=obs.levels_completed or 0,
+            diff_summary=state.diff_text,
         )
         state.steps.append(record)
 
-        # Update grid and available actions
-        state.prev_grid = grid
-        if obs.frame:
-            grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
-        if hasattr(obs, "available_actions") and obs.available_actions:
-            state.available_actions = list(obs.available_actions)
-
-        # Update live display
+        # Update display
         if display:
             status = obs.state.name if obs.state else "?"
             display.update(grid, f"Step {step_num + 1}: {label}{coords}  [{status}]")
 
-        # Save frame
         if config.save_frames:
             img = grid_to_image(grid, scale=4)
             img.save(frames_path / f"step_{step_num + 1:03d}_{label.lower()}.png")
             saved_frames.append(img.copy())
 
-        # Step mode: prompt human for feedback
         if config.step_mode:
             feedback = prompt_human("Comment/question")
             if feedback is None:
@@ -614,34 +689,25 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             if feedback:
                 state.human_feedback = feedback
 
-        # Delay for visual rendering
         if config.delay > 0:
             time.sleep(config.delay)
 
         # Check terminal states
         if obs.state == GameState.WIN:
-            print(f"  WIN after {step_num + 1} steps! "
+            print(f"\n  🏆 WIN after {step_num + 1} steps! "
                   f"Levels completed: {obs.levels_completed}")
             break
         elif obs.state == GameState.GAME_OVER:
             print(f"\n  *** GAME OVER at step {step_num + 1} ***")
-            print(f"  Injecting reflection prompt...")
 
-            # Inject a reflection message so the agent learns from death
             death_msg = {
                 "role": "user",
                 "content": [{
                     "type": "text",
                     "text": (
-                        "*** GAME OVER — YOU DIED ***\n\n"
-                        "STOP and REFLECT before continuing:\n"
-                        "1. What EXACTLY led to this death? Trace the last few actions.\n"
-                        "2. What assumption was WRONG? Something in your memory is incorrect.\n"
-                        "3. Re-read your controls, rules, and goal. Which ones should you "
-                        "doubt or re-test?\n"
-                        "4. What will you do DIFFERENTLY this time?\n\n"
-                        "Update your memory: increment deaths, add a lesson learned, and "
-                        "CORRECT any wrong assumptions. The level will now reset."
+                        "*** GAME OVER ***\n\n"
+                        "REFLECT: What assumption was WRONG? What will you do DIFFERENTLY?\n"
+                        "Update memory: increment deaths, add lesson, CORRECT wrong assumptions."
                     ),
                 }],
             }
@@ -651,19 +717,27 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             if obs and obs.frame:
                 grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
                 state.prev_grid = None
+                state.diff_text = "Level reset after GAME_OVER."
+                state.frame_analysis = describe_frame(grid)
+                state.no_progress_count = 0
+                bar_tracker.update(grid, step_num + 1)
                 if hasattr(obs, "available_actions") and obs.available_actions:
                     state.available_actions = list(obs.available_actions)
                 if display:
                     display.update(grid, "GAME OVER — RESET")
 
-    # Save GIF of all frames
+                # Force re-analyze after death
+                print("  [ANALYZER] Re-analyzing after death...")
+                analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
+
+    # Save GIF
     if config.save_frames and len(saved_frames) > 1:
         gif_path = frames_path / "replay.gif"
         saved_frames[0].save(
             gif_path,
             save_all=True,
             append_images=saved_frames[1:],
-            duration=500,  # 500ms per frame
+            duration=500,
             loop=0,
         )
         print(f"  Replay GIF saved: {gif_path.resolve()}")

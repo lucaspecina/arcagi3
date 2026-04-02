@@ -1,0 +1,20 @@
+id: E004
+title: "Exploration controller + entity grouping + wall detection"
+issue: I-003
+date: 2026-04-02
+status: running
+hypothesis: External policy (wall detection, frontier exploration, oscillation breaking) fixes the navigation problem
+changes_from_E003:
+  - ExplorationController with position tracking, visited regions, blocked transitions
+  - Wall detection (action produces no movement → wall)
+  - Frontier detection (unexplored regions adjacent to visited)
+  - Oscillation detection (A-B-A-B pattern warning)
+  - Co-movement detection (objects moving together = same entity, not target)
+  - Health bar decline warning with steps-left estimate
+  - Direction suggestion toward nearest frontier
+setup:
+  model: gpt-5.4
+  max_actions: 50
+  vision: true
+  analyze_every: 3
+  games: [ls20]

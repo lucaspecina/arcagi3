@@ -47,6 +47,9 @@ pip install -e ".[dev]"    # instalar proyecto + deps de desarrollo
 
 ## External services
 - **Azure AI Foundry**: `OpenAI(base_url=AZURE_FOUNDRY_BASE_URL, api_key=AZURE_INFERENCE_CREDENTIAL)`
+- **Budget**: $70 USD total for gpt-5.4. Check with `bash scripts/check_budget.sh`
+- **Pricing**: Input ~$3/1M, Output ~$12/1M (output 4x more expensive!)
+- **Models**: gpt-5.4, gpt-5.4-pro, gpt-5.3-chat, gpt-5.2-chat, gpt-5.2-codex, claude-opus-4-6, claude-sonnet-4-6
 - Env vars: `AZURE_INFERENCE_CREDENTIAL`, `AZURE_FOUNDRY_BASE_URL`, `AZURE_MODEL`
 
 ## Project structure

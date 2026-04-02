@@ -1,0 +1,19 @@
+id: E001
+title: Baseline capability test — GPT-5.4 on ARC-AGI-3
+issue: I-003
+date: 2026-04-02
+status: running
+hypothesis: GPT-5.4 has latent capabilities for ARC-AGI-3 that emerge with current prompting
+setup:
+  model: gpt-5.4
+  max_actions: 30
+  vision: true
+  temperature: 0.7
+  games: [ls20, plus more TBD]
+metrics:
+  - levels_completed
+  - deaths
+  - unique_actions_used
+  - quality_of_memory (manual assessment)
+  - object_recognition (manual assessment)
+  - action_mapping_accuracy (manual assessment)

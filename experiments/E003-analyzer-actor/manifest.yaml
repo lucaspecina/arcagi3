@@ -1,0 +1,25 @@
+id: E003
+title: "Analyzer-Actor split + deterministic trackers"
+issue: I-003
+date: 2026-04-02
+status: running
+hypothesis: Separating perception (analyzer) from action (actor) enables better goal identification and navigation
+changes_from_baseline:
+  - Analyzer LLM call for focused perception (what do I control, resources, targets)
+  - Actor LLM call for action selection based on analysis
+  - AvatarTracker: deterministic tracking of controlled object via movement correlation
+  - BarTracker: monotonic bar detection (health bars flagged as COST not progress)
+  - Analyzer runs initially + every 3 steps + after death
+  - Vision detail=high for analyzer, low for actor
+setup:
+  model: gpt-5.4
+  max_actions: 50
+  vision: true
+  analyze_every: 3
+  games: [ls20]
+metrics:
+  - levels_completed
+  - avatar_identified_step (when avatar tracker first fires)
+  - goal_hypothesis_quality
+  - bar_correctly_identified
+  - navigation_intentional (manual assessment)

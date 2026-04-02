@@ -141,3 +141,221 @@ def grid_to_text_compact(grid: np.ndarray) -> str:
     for row in grid:
         lines.append("".join(format(int(v), "x") for v in row))
     return "\n".join(lines)
+
+
+# --- Frame analysis and diff utilities ---
+
+COLOR_NAMES = {
+    0: "white", 1: "light-gray", 2: "gray", 3: "dark-gray",
+    4: "near-black", 5: "black", 6: "magenta", 7: "pink",
+    8: "red", 9: "blue", 10: "light-blue", 11: "yellow",
+    12: "orange", 13: "maroon", 14: "green", 15: "purple",
+}
+
+
+def grid_hash(grid: np.ndarray) -> str:
+    """Fast hash of a grid for state deduplication."""
+    return hash(grid.tobytes())
+
+
+def find_objects(grid: np.ndarray, background: int | None = None) -> list[dict]:
+    """Find connected components (objects) in the grid using flood fill.
+
+    Returns list of objects with: color, pixels, bbox, centroid, size.
+    Skips the background color (most common color if not specified).
+    """
+    h, w = grid.shape
+    if background is None:
+        # Most common color is background
+        values, counts = np.unique(grid, return_counts=True)
+        background = int(values[np.argmax(counts)])
+
+    visited = np.zeros((h, w), dtype=bool)
+    objects = []
+
+    for y in range(h):
+        for x in range(w):
+            if visited[y, x] or int(grid[y, x]) == background:
+                continue
+            # Flood fill
+            color = int(grid[y, x])
+            stack = [(y, x)]
+            pixels = []
+            while stack:
+                cy, cx = stack.pop()
+                if cy < 0 or cy >= h or cx < 0 or cx >= w:
+                    continue
+                if visited[cy, cx] or int(grid[cy, cx]) != color:
+                    continue
+                visited[cy, cx] = True
+                pixels.append((cx, cy))
+                stack.extend([(cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)])
+
+            if len(pixels) < 2:
+                continue  # Skip single pixels (noise)
+
+            xs = [p[0] for p in pixels]
+            ys = [p[1] for p in pixels]
+            obj = {
+                "color": color,
+                "color_name": COLOR_NAMES.get(color, f"color-{color}"),
+                "size": len(pixels),
+                "bbox": (min(xs), min(ys), max(xs), max(ys)),
+                "centroid": (round(sum(xs) / len(xs), 1), round(sum(ys) / len(ys), 1)),
+            }
+            objects.append(obj)
+
+    # Sort by size descending
+    objects.sort(key=lambda o: o["size"], reverse=True)
+    return objects
+
+
+def compute_diff(prev: np.ndarray, curr: np.ndarray) -> dict:
+    """Compute a structured diff between two frames.
+
+    Returns: changed_cells count, changed_regions, moved_objects summary.
+    """
+    if prev is None:
+        return {"type": "initial", "description": "First frame, no previous to compare."}
+
+    diff_mask = prev != curr
+    n_changed = int(np.sum(diff_mask))
+
+    if n_changed == 0:
+        return {"type": "no_change", "changed_cells": 0, "description": "NO pixels changed. Action had NO visible effect."}
+
+    total = prev.shape[0] * prev.shape[1]
+    pct = round(100 * n_changed / total, 1)
+
+    # Find changed regions (bounding boxes of connected changed areas)
+    changed_ys, changed_xs = np.where(diff_mask)
+    regions = []
+    if n_changed <= 200:
+        # Small change: describe precisely
+        # Find what colors appeared/disappeared
+        old_colors = set(int(prev[y, x]) for y, x in zip(changed_ys, changed_xs))
+        new_colors = set(int(curr[y, x]) for y, x in zip(changed_ys, changed_xs))
+
+        old_names = [COLOR_NAMES.get(c, f"c{c}") for c in old_colors]
+        new_names = [COLOR_NAMES.get(c, f"c{c}") for c in new_colors]
+
+        # Bounding box of changes
+        x_min, x_max = int(changed_xs.min()), int(changed_xs.max())
+        y_min, y_max = int(changed_ys.min()), int(changed_ys.max())
+
+        regions.append({
+            "bbox": (x_min, y_min, x_max, y_max),
+            "center": (round((x_min + x_max) / 2), round((y_min + y_max) / 2)),
+            "old_colors": old_names,
+            "new_colors": new_names,
+        })
+
+    # Detect movement: same-color object disappeared in one spot, appeared in another
+    movements = _detect_movements(prev, curr, diff_mask)
+
+    result = {
+        "type": "changed",
+        "changed_cells": n_changed,
+        "changed_pct": pct,
+        "regions": regions,
+        "movements": movements,
+    }
+
+    # Build human-readable description
+    desc_parts = [f"{n_changed} pixels changed ({pct}% of grid)."]
+    for m in movements:
+        desc_parts.append(
+            f"{m['color_name']} object moved from ({m['from_x']},{m['from_y']}) "
+            f"to ({m['to_x']},{m['to_y']}), delta=({m['dx']},{m['dy']})."
+        )
+    if not movements and regions:
+        r = regions[0]
+        desc_parts.append(
+            f"Changes in area ({r['bbox'][0]},{r['bbox'][1]})-({r['bbox'][2]},{r['bbox'][3]}). "
+            f"Colors before: {', '.join(r['old_colors'])}. After: {', '.join(r['new_colors'])}."
+        )
+    result["description"] = " ".join(desc_parts)
+    return result
+
+
+def _detect_movements(prev: np.ndarray, curr: np.ndarray, diff_mask: np.ndarray) -> list[dict]:
+    """Detect objects that moved between frames."""
+    movements = []
+
+    # For each non-background color in the changed area
+    changed_ys, changed_xs = np.where(diff_mask)
+    if len(changed_ys) == 0:
+        return movements
+
+    colors_in_diff = set()
+    for y, x in zip(changed_ys, changed_xs):
+        colors_in_diff.add(int(prev[y, x]))
+        colors_in_diff.add(int(curr[y, x]))
+
+    # Get background (most common in whole grid)
+    vals, counts = np.unique(curr, return_counts=True)
+    bg = int(vals[np.argmax(counts)])
+
+    for color in colors_in_diff:
+        if color == bg:
+            continue
+
+        # Where was this color before (in changed area only)?
+        old_positions = [(int(x), int(y)) for y, x in zip(changed_ys, changed_xs) if int(prev[y, x]) == color]
+        new_positions = [(int(x), int(y)) for y, x in zip(changed_ys, changed_xs) if int(curr[y, x]) == color]
+
+        if old_positions and new_positions:
+            # Compute centroids
+            old_cx = sum(p[0] for p in old_positions) / len(old_positions)
+            old_cy = sum(p[1] for p in old_positions) / len(old_positions)
+            new_cx = sum(p[0] for p in new_positions) / len(new_positions)
+            new_cy = sum(p[1] for p in new_positions) / len(new_positions)
+
+            dx = round(new_cx - old_cx)
+            dy = round(new_cy - old_cy)
+
+            if abs(dx) > 0 or abs(dy) > 0:
+                movements.append({
+                    "color": color,
+                    "color_name": COLOR_NAMES.get(color, f"color-{color}"),
+                    "from_x": round(old_cx),
+                    "from_y": round(old_cy),
+                    "to_x": round(new_cx),
+                    "to_y": round(new_cy),
+                    "dx": dx,
+                    "dy": dy,
+                })
+
+    return movements
+
+
+def describe_frame(grid: np.ndarray) -> str:
+    """Generate a text description of the current frame: objects, layout, colors."""
+    h, w = grid.shape
+    vals, counts = np.unique(grid, return_counts=True)
+
+    # Color distribution (skip tiny amounts)
+    total = h * w
+    color_dist = []
+    bg_color = int(vals[np.argmax(counts)])
+    for v, c in sorted(zip(vals, counts), key=lambda x: -x[1]):
+        pct = round(100 * int(c) / total, 1)
+        if pct >= 0.5:
+            name = COLOR_NAMES.get(int(v), f"color-{int(v)}")
+            color_dist.append(f"{name}: {pct}%")
+
+    objects = find_objects(grid, background=bg_color)
+
+    lines = [f"Background: {COLOR_NAMES.get(bg_color, f'color-{bg_color}')}"]
+    lines.append(f"Colors present: {', '.join(color_dist)}")
+    if objects:
+        lines.append(f"Objects found ({len(objects)}):")
+        for i, obj in enumerate(objects[:15]):  # Limit to top 15
+            bbox = obj["bbox"]
+            cx, cy = obj["centroid"]
+            lines.append(
+                f"  #{i+1}: {obj['color_name']} object, "
+                f"{obj['size']}px, center=({cx},{cy}), "
+                f"bbox=({bbox[0]},{bbox[1]})-({bbox[2]},{bbox[3]})"
+            )
+    return "\n".join(lines)
