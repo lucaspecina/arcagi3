@@ -320,14 +320,19 @@ def run_analyzer(
         {"role": "user", "content": content},
     ]
 
-    response = client.chat.completions.create(
-        model=config.model,
-        messages=messages,
-        temperature=0.3,  # Lower temp for perception accuracy
-        max_completion_tokens=1000,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=config.model,
+            messages=messages,
+            temperature=0.3,  # Lower temp for perception accuracy
+            max_completion_tokens=1000,
+            timeout=120,
+        )
+        analysis = response.choices[0].message.content or ""
+    except Exception as e:
+        print(f"  [ANALYZER] API error: {e}")
+        analysis = state.last_analysis or "{}"
 
-    analysis = response.choices[0].message.content or ""
     state.last_analysis = analysis
     state.analysis_history.append(analysis)
     return analysis
@@ -372,6 +377,7 @@ def run_actor(
         messages=messages,
         temperature=config.temperature,
         max_completion_tokens=1000,
+        timeout=120,
     )
 
     reply_text = response.choices[0].message.content or ""
