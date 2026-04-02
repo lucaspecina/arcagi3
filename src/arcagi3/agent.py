@@ -68,17 +68,44 @@ FIRST TURN: Study the grid carefully. Identify distinct objects, colors, regions
 Form a hypothesis. Then test ONE action to learn what it does.
 
 EVERY TURN:
-- OBSERVE: What changed? What stayed the same?
-- LEARN: What did my action do? Update control knowledge.
-- REASON: What rules/mechanics does this reveal?
-- PLAN: What should I try next and why?
+- OBSERVE: Look at the ACTUAL grid. What SPECIFICALLY changed? Compare pixel by \
+pixel with what you expected. Do NOT rely on your memory of what you think the \
+grid looks like — LOOK at what is actually there.
+- VERIFY: Does what just happened MATCH what your memory says this action does? \
+If ACTION1 is recorded as "moves up" but the object moved DOWN, your memory is \
+WRONG. Fix it immediately. Your memory is full of hypotheses, not facts.
+- REASON: What rules/mechanics does this reveal? What assumptions should you revise?
+- PLAN: What should you try next and why?
+
+## CRITICAL: Your memory is NOT truth — it's hypotheses
+
+YOUR MEMORY CAN BE WRONG. Treat every entry as a hypothesis that needs constant \
+verification, not as established fact.
+
+EVERY FEW TURNS, actively challenge your own beliefs:
+- "I wrote that ACTION1 moves up — is that ACTUALLY what I'm seeing?"
+- "I assumed the blue object is my avatar — what if it's not?"
+- "I think the goal is X — but what evidence do I ACTUALLY have?"
+
+If your actions are not producing the expected results, the FIRST thing to \
+suspect is that your memory is wrong. Re-test your assumptions. The grid is \
+the ground truth, not your notes.
+
+Common traps:
+- Writing down a control mapping wrong on the first test and never questioning it
+- Assuming you know what an object is without verifying
+- Continuing a failing plan because your memory says it should work
+- Not noticing that the grid contradicts your beliefs
 
 ## Strategy
 - Level 1 is a tutorial — it teaches basic mechanics. Pay close attention.
 - Be SYSTEMATIC: test each available action once early on to map controls.
 - Track what changed after each action — that's your primary learning signal.
-- If stuck for several turns, RESET and try a different approach.
-- Later levels add new mechanics on top of what you learned.
+- VERIFY your control mappings: if you think ACTION1=up, move and CHECK that \
+the object actually moved up. If it didn't, CORRECT your memory immediately.
+- If stuck for several turns, STOP. Re-read your memory critically. Is something \
+wrong in your assumptions? Re-test from scratch if needed.
+- If things keep not working as expected, RESET and question EVERYTHING.
 - EFFICIENCY MATTERS: your score penalizes wasted actions quadratically.
 
 ## Human observer
@@ -86,34 +113,39 @@ A human observer may provide comments or hints between turns.
 
 ## Persistent memory
 You have a memory dict that persists across ALL turns (even when old messages \
-are dropped). You MUST update it every turn. If you don't write it down, you \
-WILL forget it.
+are dropped). You MUST update it every turn.
 
 ## Response format
 Respond with a JSON object:
 {
-  "reasoning": "OBSERVE what changed, LEARN from it, PLAN next steps",
+  "reasoning": "OBSERVE what actually happened, VERIFY against memory, PLAN next steps",
   "action": "ACTION1|ACTION2|ACTION3|ACTION4|ACTION5|ACTION6|ACTION7|RESET",
   "x": 0,
   "y": 0,
   "memory": {
-    "controls": {"ACTION1": "what it does", "ACTION2": "untested", ...},
+    "controls": {"ACTION1": "what it does (VERIFIED/unverified)", ...},
     "rules": ["confirmed rule 1", "confirmed rule 2"],
     "goal": "current hypothesis about win condition",
     "map": "layout description: objects, colors, positions",
     "plan": "current strategy and next steps",
-    "level": 1
+    "level": 1,
+    "deaths": 0,
+    "lessons": ["what I learned from each death/failure"]
   }
 }
 
 Memory rules:
 - ALWAYS include and update memory every turn.
-- "controls": map each action to observed effect. Mark untested as "untested".
-- "rules": only confirmed mechanics (things you verified).
-- "goal": best hypothesis, updated with evidence.
+- "controls": map each action to observed effect. Mark as VERIFIED only after \
+you've confirmed it multiple times. Mark untested as "untested", unconfirmed \
+as "unverified: seems to do X".
+- "rules": only confirmed mechanics. Remove rules that turn out to be wrong.
+- "goal": best hypothesis with evidence. Note confidence level.
 - "map": spatial layout, key objects and their positions.
-- "plan": step-by-step strategy, updated when plan changes.
-- "level": current level number (increment when you complete one).
+- "plan": step-by-step strategy. Update when plan changes.
+- "level": current level number.
+- "deaths": how many times you've died (GAME_OVER). Learn from each one.
+- "lessons": key learnings from failures. What went wrong and what to do differently.
 
 "x" and "y" are ONLY for ACTION6.
 """
@@ -136,6 +168,7 @@ class AgentConfig:
     frames_dir: str = "frames"
     step_mode: bool = False
     show_raw_prompt: bool = False
+    show_window: bool = False
 
     def __post_init__(self):
         if not self.base_url:
@@ -357,8 +390,8 @@ def choose_action(
     messages.extend(state.messages[history_start:])
     messages.append(user_msg)
 
-    # Show raw prompt on first call
-    if config.show_raw_prompt and len(state.steps) == 0:
+    # Show raw prompt on first call (always in step mode, or if --raw)
+    if (config.show_raw_prompt or config.step_mode) and len(state.steps) == 0:
         print_raw_prompt(messages)
 
     response = client.chat.completions.create(
@@ -395,7 +428,70 @@ def choose_action(
         data = {"x": max(0, min(63, x)), "y": max(0, min(63, y))}
 
     reasoning = parsed.get("reasoning", reply_text[:200])
-    return game_action, data, reasoning
+    return game_action, data, reasoning, parsed
+
+
+def format_memory(mem: dict) -> str:
+    """Format the agent memory dict for human-readable terminal output."""
+    lines = []
+    if "controls" in mem and isinstance(mem["controls"], dict):
+        lines.append("  Controls:")
+        for k, v in mem["controls"].items():
+            lines.append(f"    {k}: {v}")
+    if "rules" in mem and mem["rules"]:
+        lines.append("  Rules:")
+        rules = mem["rules"] if isinstance(mem["rules"], list) else [mem["rules"]]
+        for r in rules:
+            lines.append(f"    - {r}")
+    if "goal" in mem:
+        lines.append(f"  Goal: {mem['goal']}")
+    if "map" in mem:
+        lines.append(f"  Map: {mem['map']}")
+    if "plan" in mem:
+        lines.append(f"  Plan: {mem['plan']}")
+    if "level" in mem:
+        lines.append(f"  Level: {mem['level']}")
+    if "deaths" in mem:
+        lines.append(f"  Deaths: {mem['deaths']}")
+    if "lessons" in mem and mem["lessons"]:
+        lines.append("  Lessons:")
+        lessons = mem["lessons"] if isinstance(mem["lessons"], list) else [mem["lessons"]]
+        for l in lessons:
+            lines.append(f"    - {l}")
+    return "\n".join(lines)
+
+
+class LiveDisplay:
+    """Persistent matplotlib window that updates each step."""
+
+    def __init__(self):
+        import matplotlib
+        matplotlib.use("TkAgg")
+        import matplotlib.pyplot as plt
+        self._plt = plt
+        plt.ion()
+        self._fig, self._ax = plt.subplots(1, 1, figsize=(6, 6))
+        self._fig.canvas.manager.set_window_title("ARC-AGI-3")
+        self._im = None
+        self._ax.set_axis_off()
+        plt.tight_layout()
+        plt.show(block=False)
+        plt.pause(0.01)
+
+    def update(self, grid: np.ndarray, title: str = ""):
+        img = grid_to_image(grid, scale=4)
+        arr = np.array(img)
+        if self._im is None:
+            self._im = self._ax.imshow(arr)
+        else:
+            self._im.set_data(arr)
+        self._ax.set_title(title, fontsize=10, loc="left")
+        self._fig.canvas.draw_idle()
+        self._fig.canvas.flush_events()
+        self._plt.pause(0.01)
+
+    def close(self):
+        self._plt.close(self._fig)
 
 
 def run_agent(env, config: AgentConfig | None = None) -> AgentState:
@@ -406,6 +502,14 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
     client = create_client(config)
     state = AgentState()
     saved_frames: list[Image.Image] = []
+    display = None
+
+    # Set up live display window
+    if config.show_window:
+        try:
+            display = LiveDisplay()
+        except Exception as e:
+            print(f"  WARNING: Could not open display window: {e}")
 
     # Set up frame saving
     if config.save_frames:
@@ -426,6 +530,10 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
     if hasattr(obs, "available_actions") and obs.available_actions:
         state.available_actions = list(obs.available_actions)
 
+    # Show initial frame
+    if display:
+        display.update(grid, "Initial observation")
+
     # Save initial frame
     if config.save_frames:
         img = grid_to_image(grid, scale=4)
@@ -443,14 +551,22 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
     for step_num in range(config.max_actions):
         # Ask LLM for action
-        game_action, data, reasoning = choose_action(client, grid, state, config)
+        game_action, data, reasoning, parsed = choose_action(client, grid, state, config)
 
         action_name = game_action.name
         label = ACTION_LABELS.get(action_name, action_name)
         coords = f" x={data['x']},y={data['y']}" if data else ""
-        print(f"\n  [{step_num + 1}/{config.max_actions}]")
-        print(f"  Thinking: {reasoning}")
-        print(f"  Action:   >>> {label}{coords}")
+
+        # Display step info
+        sep = "─" * 60
+        print(f"\n{sep}")
+        print(f"  Step {step_num + 1}/{config.max_actions}")
+        print(sep)
+        print(f"\n  Reasoning:\n    {reasoning}\n")
+        print(f"  Action: >>> {label}{coords}")
+        if "memory" in parsed and isinstance(parsed["memory"], dict):
+            print(f"\n  Memory:\n{format_memory(parsed['memory'])}")
+        print()
 
         # Execute action
         obs = env.step(game_action, data=data or {})
@@ -478,6 +594,11 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         if hasattr(obs, "available_actions") and obs.available_actions:
             state.available_actions = list(obs.available_actions)
 
+        # Update live display
+        if display:
+            status = obs.state.name if obs.state else "?"
+            display.update(grid, f"Step {step_num + 1}: {label}{coords}  [{status}]")
+
         # Save frame
         if config.save_frames:
             img = grid_to_image(grid, scale=4)
@@ -503,11 +624,37 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
                   f"Levels completed: {obs.levels_completed}")
             break
         elif obs.state == GameState.GAME_OVER:
-            print(f"  GAME OVER at step {step_num + 1}. Resetting...")
+            print(f"\n  *** GAME OVER at step {step_num + 1} ***")
+            print(f"  Injecting reflection prompt...")
+
+            # Inject a reflection message so the agent learns from death
+            death_msg = {
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "text": (
+                        "*** GAME OVER — YOU DIED ***\n\n"
+                        "STOP and REFLECT before continuing:\n"
+                        "1. What EXACTLY led to this death? Trace the last few actions.\n"
+                        "2. What assumption was WRONG? Something in your memory is incorrect.\n"
+                        "3. Re-read your controls, rules, and goal. Which ones should you "
+                        "doubt or re-test?\n"
+                        "4. What will you do DIFFERENTLY this time?\n\n"
+                        "Update your memory: increment deaths, add a lesson learned, and "
+                        "CORRECT any wrong assumptions. The level will now reset."
+                    ),
+                }],
+            }
+            state.messages.append(death_msg)
+
             obs = env.reset()
             if obs and obs.frame:
                 grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
                 state.prev_grid = None
+                if hasattr(obs, "available_actions") and obs.available_actions:
+                    state.available_actions = list(obs.available_actions)
+                if display:
+                    display.update(grid, "GAME OVER — RESET")
 
     # Save GIF of all frames
     if config.save_frames and len(saved_frames) > 1:
@@ -520,5 +667,8 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             loop=0,
         )
         print(f"  Replay GIF saved: {gif_path.resolve()}")
+
+    if display:
+        display.close()
 
     return state

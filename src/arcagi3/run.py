@@ -40,10 +40,6 @@ def main():
             print(f"  {e.game_id}: {getattr(e, 'title', '?')}")
         return
 
-    # Window mode overrides render
-    if args.window:
-        args.render = "human"
-
     # Configure agent
     config = AgentConfig(
         model=args.model or "",
@@ -56,10 +52,14 @@ def main():
         show_raw_prompt=args.raw,
         save_frames=args.save_frames,
         frames_dir=args.frames_dir,
+        show_window=args.window,
     )
 
-    # Create environment
+    # Create environment — use terminal render unless explicitly set, never "human"
+    # (our own LiveDisplay handles the window)
     render_mode = None if args.render == "none" else args.render
+    if args.window:
+        render_mode = None
     print(f"Creating environment: {args.game} (render={render_mode})")
     env = arc.make(args.game, render_mode=render_mode)
 

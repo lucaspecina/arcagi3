@@ -1,7 +1,7 @@
 # TODO
 
 ## NOW
-- [ ] Research de approaches para ARC-AGI-3 harness → I-003
+- [ ] Diseño de approach: parallel runs + synthesis + critic → I-003
 - [ ] Testear agente actual en ARC-AGI-3 con API keys (baseline)
 
 ## NEXT
