@@ -514,6 +514,30 @@ def run_reflector(
     if "updated_beliefs" in parsed:
         beliefs = parsed["updated_beliefs"]
         if isinstance(beliefs, dict):
+            # HARNESS ENFORCEMENT: if stagnant and goal didn't change, force it
+            if state.no_progress_count >= 5:
+                old_goal = ""
+                try:
+                    old_beliefs = json.loads(state.memory)
+                    old_goal = old_beliefs.get("goal", "")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                new_goal = beliefs.get("goal", "")
+                # Check if goal is essentially the same (fuzzy match)
+                if old_goal and new_goal and old_goal[:40] == new_goal[:40]:
+                    # Goal didn't change despite stagnation — force alternatives
+                    strategy = parsed.get("strategy_check", {})
+                    alts = []
+                    if isinstance(strategy, dict):
+                        alts = strategy.get("alternative_goals", [])
+                    if alts:
+                        beliefs["goal"] = f"{alts[0]} (FORCED by harness — old goal stagnated)"
+                        if "failed_approaches" not in beliefs:
+                            beliefs["failed_approaches"] = []
+                        beliefs["failed_approaches"].append(
+                            f"Goal '{old_goal[:80]}' — stagnated for {state.no_progress_count} steps"
+                        )
+                        print(f"  [HARNESS] FORCED goal change: {beliefs['goal'][:100]}")
             state.memory = json.dumps(beliefs, indent=2)
 
     return reflection
