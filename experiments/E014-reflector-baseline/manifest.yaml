@@ -1,0 +1,15 @@
+id: E014
+title: "Reflector baseline — belief validation meta-cognition"
+issue: I-003
+date: 2026-04-02
+status: running
+hypothesis: "Forced belief validation after every action improves reasoning quality and puzzle solving"
+setup:
+  model: gpt-5.4
+  max_actions: 30
+  vision: true
+  analyze_every: 5
+  games: [ls20, g50t, sb26]
+  runs_per_game: 2
+architecture: "Analyzer → Actor → Execute → Reflector → loop"
+key_metric: "levels_completed > 0 in any game"

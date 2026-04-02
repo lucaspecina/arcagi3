@@ -1,8 +1,9 @@
 """LLM Agent for ARC-AGI-3 using Azure AI Foundry.
 
-Architecture: Analyzer-Actor split.
-- Analyzer: focused perception (what do I control, what are resources, what's the goal?)
-- Actor: picks the best action based on the analysis
+Architecture: Analyzer-Reflector-Actor loop.
+- Analyzer: focused perception (what changed, what do I see?)
+- Reflector: forced meta-cognition — validate EVERY belief against new evidence
+- Actor: picks the best action based on validated beliefs
 - Trackers: deterministic avatar/bar detection
 """
 
@@ -78,43 +79,74 @@ Respond with a JSON object:
 }
 """
 
-# --- ACTOR PROMPT ---
-ACTOR_PROMPT = """\
-You are the ACTION module of an ARC-AGI-3 agent. You receive a perception analysis \
-and choose the BEST next action.
+# --- REFLECTOR PROMPT ---
+REFLECTOR_PROMPT = """\
+You are the REFLECTION module of an ARC-AGI-3 agent. Your job is MANDATORY \
+meta-cognition: validate every belief against new evidence.
 
-RULES:
-- EFFICIENCY MATTERS: score = (human_actions/your_actions)². Fewer = better.
-- If there are UNTESTED actions, test them first — one at a time.
-- Do NOT repeat the same action more than 2 times in a row unless you have strong reason.
-- Consuming a resource bar is COST, not progress. Do NOT optimize for depleting bars.
-- If stuck 3+ turns, CHANGE APPROACH completely.
-- Navigate toward identified targets when you have a goal hypothesis.
+You just took an action and observed the result. You MUST now:
 
-PHASE GUIDE:
-- DISCOVER: Test each action once. Record effects.
-- PROBE: Interact with objects. Test hypotheses about goals.
-- PURSUE: Execute a plan toward the goal.
+1. WHAT HAPPENED: What exactly changed? Be specific (objects moved, colors changed, \
+bars decreased, new objects appeared, etc.)
+
+2. PREDICTION vs REALITY: What did you expect? What actually happened? \
+If they differ, WHY?
+
+3. VALIDATE EACH BELIEF: Go through EVERY belief below and mark each one:
+   - CONFIRMED (evidence supports it)
+   - CONTRADICTED (evidence disproves it — explain why and what's correct)
+   - UNVERIFIED (no new evidence either way)
+
+4. NEW DISCOVERIES: Did this step reveal anything new? New objects, new mechanics, \
+new patterns?
+
+5. UPDATED BELIEFS: Output your COMPLETE updated belief set. Drop wrong beliefs. \
+Add new ones. Strengthen confirmed ones.
+
+Be BRUTALLY HONEST. If a belief was wrong, SAY SO and correct it. \
+Never keep a belief just because you stated it before.
 
 Respond with a JSON object:
 {
-  "reasoning": "Why this action, based on the analysis",
-  "action": "ACTION1|...|ACTION7|RESET",
-  "x": 0, "y": 0,
-  "expected_result": "What I expect to see after this action",
-  "phase": "discover|probe|pursue",
-  "memory": {
-    "controls": {"ACTION1": "effect (VERIFIED/unverified/untested)", ...},
+  "what_happened": "specific description of what changed",
+  "prediction_vs_reality": "expected X, got Y, because Z",
+  "belief_validations": [
+    {"belief": "text", "status": "CONFIRMED|CONTRADICTED|UNVERIFIED", "evidence": "why"}
+  ],
+  "new_discoveries": ["discovery 1", "discovery 2"],
+  "updated_beliefs": {
+    "controls": {"ACTION1": "effect (CONFIRMED/unverified/untested)", ...},
     "rules": ["confirmed rule 1", ...],
-    "goal": "current hypothesis",
-    "plan": "current strategy",
-    "level": 1,
-    "deaths": 0,
-    "lessons": ["key learnings"]
+    "goal": "current hypothesis with confidence (low/medium/high)",
+    "objects": ["object descriptions with locations"],
+    "dangers": ["things that cause damage or game over"],
+    "unknowns": ["things I still need to test or understand"]
   }
 }
+"""
 
-"x" and "y" are ONLY for ACTION6.
+# --- ACTOR PROMPT ---
+ACTOR_PROMPT = """\
+You are the ACTION module of an ARC-AGI-3 agent. You receive VALIDATED beliefs \
+(already checked against evidence) and choose the BEST next action.
+
+RULES:
+- EFFICIENCY MATTERS: score = (human_actions/your_actions)². Fewer = better.
+- TRUST YOUR BELIEFS: they were just validated by the reflector. Act on them.
+- If there are UNTESTED actions, test them — one at a time.
+- Do NOT repeat the same action more than 2 times in a row unless you have strong reason.
+- If stuck 3+ turns, CHANGE APPROACH completely.
+- Navigate toward identified targets when you have a goal hypothesis.
+
+Respond with a JSON object:
+{
+  "reasoning": "Why this action, based on validated beliefs",
+  "action": "ACTION1|...|ACTION7|RESET",
+  "x": 0, "y": 0,
+  "expected_result": "What I expect to see — be SPECIFIC so reflector can check"
+}
+
+"x" and "y" are ONLY for ACTION6. Keep reasoning SHORT and focused.
 """
 
 
@@ -338,6 +370,66 @@ def run_analyzer(
     return analysis
 
 
+def run_reflector(
+    client,
+    grid: np.ndarray,
+    state: AgentState,
+    config: AgentConfig,
+    analysis: str,
+    last_action: str,
+    expected_result: str,
+    avatar_tracker: AvatarTracker,
+    bar_tracker: BarTracker,
+    exploration: ExplorationController | None = None,
+) -> str:
+    """Run the REFLECTOR to validate beliefs against new evidence."""
+    context = build_context_text(grid, state, config, avatar_tracker, bar_tracker, exploration)
+
+    content = []
+    text = f"You just performed: {last_action}\n"
+    text += f"You expected: {expected_result}\n\n"
+    text += context
+    if analysis:
+        text += f"\n\n=== PERCEPTION ===\n{analysis}\n==="
+    if state.memory:
+        text += f"\n\n=== YOUR CURRENT BELIEFS (validate each one!) ===\n{state.memory}\n==="
+    content.append({"type": "text", "text": text})
+
+    if config.use_vision:
+        b64 = grid_to_base64(grid, scale=2)
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
+        })
+
+    messages = [
+        {"role": "system", "content": REFLECTOR_PROMPT},
+        {"role": "user", "content": content},
+    ]
+
+    try:
+        response = client.chat.completions.create(
+            model=config.model,
+            messages=messages,
+            temperature=0.3,
+            max_completion_tokens=1500,
+            timeout=120,
+        )
+        reflection = response.choices[0].message.content or ""
+    except Exception as e:
+        print(f"  [REFLECTOR] API error: {e}")
+        reflection = "{}"
+
+    # Extract updated beliefs from reflection
+    parsed = parse_response(reflection)
+    if "updated_beliefs" in parsed:
+        beliefs = parsed["updated_beliefs"]
+        if isinstance(beliefs, dict):
+            state.memory = json.dumps(beliefs, indent=2)
+
+    return reflection
+
+
 def run_actor(
     client,
     grid: np.ndarray,
@@ -348,17 +440,17 @@ def run_actor(
     bar_tracker: BarTracker,
     exploration: ExplorationController | None = None,
 ) -> tuple[GameAction, dict | None, str, dict]:
-    """Run the ACTOR to choose the next action based on analysis."""
+    """Run the ACTOR to choose the next action based on validated beliefs."""
     context = build_context_text(grid, state, config, avatar_tracker, bar_tracker, exploration)
 
     content = []
     text = context
-    text += f"\n\n=== ANALYZER OUTPUT ===\n{analysis}\n==="
+    if analysis:
+        text += f"\n\n=== PERCEPTION ===\n{analysis}\n==="
     if state.memory:
-        text += f"\n\n=== YOUR MEMORY ===\n{state.memory}\n==="
+        text += f"\n\n=== VALIDATED BELIEFS ===\n{state.memory}\n==="
     content.append({"type": "text", "text": text})
 
-    # Add image for spatial reference
     if config.use_vision:
         b64 = grid_to_base64(grid, scale=2)
         content.append({
@@ -376,7 +468,7 @@ def run_actor(
         model=config.model,
         messages=messages,
         temperature=config.temperature,
-        max_completion_tokens=1000,
+        max_completion_tokens=500,
         timeout=120,
     )
 
@@ -386,14 +478,6 @@ def run_actor(
     # Store actor exchange in history
     state.messages.append({"role": "user", "content": content})
     state.messages.append({"role": "assistant", "content": reply_text})
-
-    # Update memory
-    if "memory" in parsed:
-        mem = parsed["memory"]
-        if isinstance(mem, dict):
-            state.memory = json.dumps(mem, indent=2)
-        else:
-            state.memory = str(mem)
 
     # Map to GameAction
     action_name = parsed.get("action", "ACTION1").upper()
@@ -566,6 +650,8 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
     analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
     print(f"  [ANALYZER] {analysis[:300]}...")
 
+    last_expected = "Unknown — first action"
+
     for step_num in range(config.max_actions):
         # Run analyzer periodically or on important events
         should_analyze = (
@@ -580,7 +666,7 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
             print(f"  [ANALYZER] {analysis[:200]}...")
 
-        # Run actor
+        # Run actor — chooses action based on validated beliefs
         game_action, data, reasoning, parsed = run_actor(
             client, grid, state, config, analysis, avatar_tracker, bar_tracker, exploration
         )
@@ -588,6 +674,7 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         action_name = game_action.name
         label = ACTION_LABELS.get(action_name, action_name)
         coords = f" x={data['x']},y={data['y']}" if data else ""
+        last_expected = parsed.get("expected_result", "no prediction")
 
         # Display step
         sep = "─" * 60
@@ -595,11 +682,8 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         print(f"  Step {step_num + 1}/{config.max_actions}")
         print(sep)
         print(f"  Reasoning: {reasoning}")
-        if parsed.get("expected_result"):
-            print(f"  Expected: {parsed['expected_result']}")
+        print(f"  Expected: {last_expected}")
         print(f"  Action: >>> {label}{coords}")
-        if "memory" in parsed and isinstance(parsed["memory"], dict):
-            print(f"\n  Memory:\n{format_memory(parsed['memory'])}")
 
         # Execute action
         obs = env.step(game_action, data=data or {})
@@ -635,7 +719,6 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
                     avatar_pos = (m["to_x"], m["to_y"])
                     prev_avatar_pos = (m["from_x"], m["from_y"])
                     break
-        # Get health bar length for controller
         health_len = None
         if bar_tracker.detected_bars:
             health_len = bar_tracker.detected_bars[0].get("current_length")
@@ -659,10 +742,38 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         bar_warn = bar_tracker.get_bar_warnings()
         if bar_warn:
             print(f"  Bar: {bar_warn}")
-        explore_report = exploration.get_exploration_report()
-        if explore_report:
-            print(f"  Explore: {explore_report}")
         print(f"  State: {'NEW' if is_novel else 'REPEATED'} | No-progress: {state.no_progress_count}")
+
+        # === REFLECTOR — forced meta-cognition after every action ===
+        print(f"  [REFLECTOR] Validating beliefs...")
+        reflection = run_reflector(
+            client, grid, state, config, analysis, action_name, last_expected,
+            avatar_tracker, bar_tracker, exploration,
+        )
+        reflection_parsed = parse_response(reflection)
+
+        # Print belief changes
+        validations = reflection_parsed.get("belief_validations", [])
+        contradicted = [v for v in validations if v.get("status") == "CONTRADICTED"]
+        confirmed = [v for v in validations if v.get("status") == "CONFIRMED"]
+        new_disc = reflection_parsed.get("new_discoveries", [])
+        print(f"  [REFLECTOR] {len(confirmed)} confirmed, {len(contradicted)} contradicted, {len(new_disc)} new")
+        if contradicted:
+            for v in contradicted:
+                print(f"    ✗ WRONG: {v.get('belief', '?')[:80]} → {v.get('evidence', '?')[:80]}")
+        if new_disc:
+            for d in new_disc[:3]:
+                print(f"    ★ NEW: {d[:100]}")
+        # Print current beliefs summary
+        if state.memory:
+            try:
+                beliefs = json.loads(state.memory)
+                if beliefs.get("goal"):
+                    print(f"  [BELIEFS] Goal: {beliefs['goal']}")
+                if beliefs.get("unknowns"):
+                    print(f"  [BELIEFS] Unknowns: {beliefs['unknowns'][:3]}")
+            except (json.JSONDecodeError, AttributeError):
+                pass
 
         # Record step
         record = StepRecord(
@@ -706,18 +817,13 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         elif obs.state == GameState.GAME_OVER:
             print(f"\n  *** GAME OVER at step {step_num + 1} ***")
 
-            death_msg = {
-                "role": "user",
-                "content": [{
-                    "type": "text",
-                    "text": (
-                        "*** GAME OVER ***\n\n"
-                        "REFLECT: What assumption was WRONG? What will you do DIFFERENTLY?\n"
-                        "Update memory: increment deaths, add lesson, CORRECT wrong assumptions."
-                    ),
-                }],
-            }
-            state.messages.append(death_msg)
+            # Force deep reflection on death
+            death_reflection = run_reflector(
+                client, grid, state, config, analysis,
+                action_name, last_expected,
+                avatar_tracker, bar_tracker, exploration,
+            )
+            print(f"  [REFLECTOR] Post-death reflection: {death_reflection[:200]}")
 
             obs = env.reset()
             if obs and obs.frame:
@@ -732,7 +838,7 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
                 if display:
                     display.update(grid, "GAME OVER — RESET")
 
-                # Force re-analyze after death
+                # Re-analyze after death
                 print("  [ANALYZER] Re-analyzing after death...")
                 analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
 
