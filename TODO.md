@@ -1,19 +1,18 @@
 # TODO
 
 ## NOW
-- [ ] Configurar .env con credenciales Azure Foundry + ARC API key
-- [ ] Testear agente LLM en ARC-AGI-3 con API keys reales
+- [ ] Research de approaches para ARC-AGI-3 harness → I-003
+- [ ] Testear agente actual en ARC-AGI-3 con API keys (baseline)
 
 ## NEXT
-- [ ] Correr agente en juego ls20 y analizar resultados
-- [ ] Mejorar prompt basado en resultados iniciales
-- [ ] Agregar retry logic para errores de API
-- [ ] Agregar tests unitarios
+- [ ] Diseñar e implementar primer approach basado en research
+- [ ] Evaluar approach vs baseline en subset de tareas
+- [ ] Iterar: analisis → nuevo approach → eval
 
 ## LATER
-- [ ] Implementar loader + pipeline ARC-AGI-2 (estatico)
-- [ ] Explorar approach multimodal vs text-only
-- [ ] Test-time training (TTT) sobre ejemplos de cada tarea
+- [ ] Multi-model orchestration (combinar GPT-5.4 + otros)
+- [ ] Test-time compute optimization (search, verification, self-correction)
+- [ ] Submission a ARC-AGI-3 leaderboard
 
 ## DONE (recent)
 - [x] Upgrade estructura a workflow estandar → I-002 — 2026-04-01

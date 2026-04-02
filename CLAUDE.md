@@ -8,8 +8,9 @@
 5. **research/README.md** — Indice de investigacion y preguntas abiertas
 
 ## LA PREGUNTA
-> Cual es el approach mas efectivo para resolver tareas ARC-AGI usando LLMs
-> como motor de razonamiento, y como lo validamos rapido?
+> Como diseñamos un sistema que orqueste LLMs frontier para resolver
+> tareas ARC-AGI-3 de manera competitiva, y como iteramos rapido
+> sobre approaches hasta encontrar uno ganador?
 >
 > Aplicar al evaluar, disenar, priorizar, o revisar.
 
@@ -26,15 +27,15 @@
 | Config de autoresearch | AUTORESEARCH.md |
 
 ## Project overview
-Investigacion para ARC Prize 2026. Pipeline de inferencia LLM para tareas ARC-AGI.
-Foco inicial en ARC-AGI-3 (interactivo), research paralelo en ARC-AGI-2 (estatico).
-Principio: empezar simple, medir todo, iterar rapido.
+Proyecto para **ganar ARC Prize 2026 en ARC-AGI-3**. Harness que orquesta modelos
+frontier (GPT-5.4, otros, combinaciones) para resolver entornos interactivos.
+Ciclo: research → implementacion → analisis → nuevo research. Iterar rapido, medir todo.
 
 ## Environment setup
 ```bash
 pip install -e ".[dev]"    # instalar proyecto + deps de desarrollo
-cp .env.example .env       # configurar API keys
 ```
+**API keys ya configuradas en `.env`** — no hace falta setup de credenciales.
 
 ## Tech stack
 - **Python 3.11+** — lenguaje principal

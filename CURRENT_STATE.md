@@ -14,8 +14,10 @@ simple y midiendo todo.
 ### Agente LLM para ARC-AGI-3 (`src/arcagi3/agent.py`)
 - Loop de decision: observa grilla → razona → elige accion → ejecuta
 - Dos modos: **vision** (grilla como imagen PNG) y **text** (grilla como hex compacto)
+- Acciones genéricas (ACTION1-7) — el agente descubre qué hace cada una
+- Filtra acciones disponibles del environment (`available_actions` del frame)
+- Memoria persistente (dict JSON) que sobrevive entre turnos
 - Message history completo para contexto entre turnos
-- Prompt estructurado con system message + observaciones + historial
 - Configuracion flexible via `AgentConfig` (modelo, max actions, vision on/off)
 
 ### Utilidades de grilla (`src/arcagi3/grid_utils.py`)
