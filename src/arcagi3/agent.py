@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import time
 from dataclasses import dataclass, field
 
@@ -12,7 +11,6 @@ from arcengine import GameAction, GameState
 from PIL import Image
 
 from .grid_utils import (
-    grid_to_ansi,
     grid_to_base64,
     grid_to_image,
     grid_to_text_compact,
@@ -84,6 +82,10 @@ ON EVERY TURN, your reasoning must address:
 - If stuck for several turns, RESET and try a completely different approach.
 - Later levels introduce new mechanics on top of what you learned.
 
+## Human observer
+A human observer may provide comments, questions, or hints between turns. \
+If present, address them directly in your reasoning before deciding your next action.
+
 ## Your knowledge state (CRITICAL — this is your long-term memory)
 You have a persistent knowledge dict that survives ALL turns, even when older messages \
 are dropped. You MUST update it every turn with your latest discoveries.
@@ -133,7 +135,8 @@ class AgentConfig:
     delay: float = 0.0
     save_frames: bool = False
     frames_dir: str = "frames"
-    show_grid: bool = False
+    step_mode: bool = False
+    show_raw_prompt: bool = False
 
     def __post_init__(self):
         if not self.base_url:
@@ -165,6 +168,7 @@ class AgentState:
     messages: list[dict] = field(default_factory=list)
     prev_grid: np.ndarray | None = None
     memory: str = ""
+    human_feedback: str = ""
 
 
 def create_client(config: AgentConfig):
@@ -182,6 +186,44 @@ def create_client(config: AgentConfig):
         )
 
     return OpenAI(base_url=config.base_url, api_key=config.api_key)
+
+
+def print_raw_prompt(messages: list[dict]) -> None:
+    """Print the raw prompt exactly as it would be sent to the model."""
+    sep = "=" * 80
+    print(f"\n{sep}")
+    print("RAW PROMPT TO MODEL")
+    print(sep)
+    for msg in messages:
+        role = msg["role"].upper()
+        print(f"\n{'─' * 35} {role} {'─' * 35}")
+        content = msg["content"]
+        if isinstance(content, str):
+            print(content)
+        elif isinstance(content, list):
+            for part in content:
+                if part["type"] == "text":
+                    print(part["text"])
+                elif part["type"] == "image_url":
+                    url = part["image_url"]["url"]
+                    if url.startswith("data:image"):
+                        b64_data = url.split(",", 1)[1] if "," in url else url
+                        size_kb = len(b64_data) * 3 // 4 // 1024
+                        print(f"  [IMAGE: base64 PNG, ~{size_kb}KB]")
+                    else:
+                        print(f"  [IMAGE: {url}]")
+    print(f"\n{sep}\n")
+
+
+def prompt_human(prompt_text: str) -> str | None:
+    """Prompt the human observer for input. Returns None on quit."""
+    try:
+        user_input = input(f"\n  > {prompt_text} (Enter to continue, q to quit): ")
+        if user_input.strip().lower() == "q":
+            return None
+        return user_input.strip()
+    except (KeyboardInterrupt, EOFError):
+        return None
 
 
 def build_user_message(
@@ -214,6 +256,10 @@ def build_user_message(
     # Agent memory/scratchpad — persists even when old messages are dropped
     if state.memory:
         text_parts.append(f"\n=== YOUR SCRATCHPAD (persists across turns) ===\n{state.memory}\n===")
+
+    # Human observer feedback
+    if state.human_feedback:
+        text_parts.append(f"\n=== HUMAN OBSERVER ===\n{state.human_feedback}\n===")
 
     content.append({"type": "text", "text": "\n".join(text_parts)})
 
@@ -284,12 +330,11 @@ def choose_action(
     state: AgentState,
     config: AgentConfig,
 ) -> tuple[GameAction, dict | None, str]:
-    """Ask the LLM to choose an action.
-
-    Returns:
-        (action, data_dict_or_None, reasoning)
-    """
+    """Ask the LLM to choose an action."""
     user_msg = build_user_message(grid, state.prev_grid, state, config)
+
+    # Clear human feedback after it's been included in the message
+    state.human_feedback = ""
 
     # Build messages: system + recent history + current
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -298,6 +343,10 @@ def choose_action(
     history_start = max(0, len(state.messages) - config.message_history_limit * 2)
     messages.extend(state.messages[history_start:])
     messages.append(user_msg)
+
+    # Show raw prompt on first call
+    if config.show_raw_prompt and len(state.steps) == 0:
+        print_raw_prompt(messages)
 
     response = client.chat.completions.create(
         model=config.model,
@@ -337,15 +386,7 @@ def choose_action(
 
 
 def run_agent(env, config: AgentConfig | None = None) -> AgentState:
-    """Run the LLM agent on an ARC-AGI-3 environment.
-
-    Args:
-        env: EnvironmentWrapper from arc_agi.Arcade.make()
-        config: Agent configuration. Uses env vars if not provided.
-
-    Returns:
-        AgentState with full history.
-    """
+    """Run the LLM agent on an ARC-AGI-3 environment."""
     if config is None:
         config = AgentConfig()
 
@@ -368,16 +409,20 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
     grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
 
-    # Show initial grid
-    if config.show_grid:
-        print("  Initial state:")
-        print(grid_to_ansi(grid))
-
     # Save initial frame
     if config.save_frames:
         img = grid_to_image(grid, scale=4)
         img.save(frames_path / "step_000_initial.png")
         saved_frames.append(img.copy())
+
+    # Interactive: prompt human before first action
+    if config.step_mode:
+        feedback = prompt_human("Comment/question before first action")
+        if feedback is None:
+            print("  Stopped by user.")
+            return state
+        if feedback:
+            state.human_feedback = feedback
 
     for step_num in range(config.max_actions):
         # Ask LLM for action
@@ -418,15 +463,20 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         if obs.frame:
             grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
 
-        # Show grid in terminal
-        if config.show_grid:
-            print(grid_to_ansi(grid))
-
         # Save frame
         if config.save_frames:
             img = grid_to_image(grid, scale=4)
             img.save(frames_path / f"step_{step_num + 1:03d}_{label.lower()}.png")
             saved_frames.append(img.copy())
+
+        # Step mode: prompt human for feedback
+        if config.step_mode:
+            feedback = prompt_human("Comment/question")
+            if feedback is None:
+                print("  Stopped by user.")
+                break
+            if feedback:
+                state.human_feedback = feedback
 
         # Delay for visual rendering
         if config.delay > 0:

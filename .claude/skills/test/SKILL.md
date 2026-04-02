@@ -14,6 +14,7 @@ Run the project test suite.
 2. If tests fail, analyze the output and suggest fixes
 3. If `$ARGUMENTS` is empty, run all tests
 4. Report: total tests, passed, failed, and any errors
+5. If all pass, also run `ruff check .` for linting
 
 ## Examples
 - `/test` — run all tests

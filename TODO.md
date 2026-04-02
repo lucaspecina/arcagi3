@@ -5,20 +5,18 @@
 - [ ] Testear agente LLM en ARC-AGI-3 con API keys reales
 
 ## NEXT
-- [ ] Instalar dependencias y correr agente en juego ls20
-- [ ] Agregar tests unitarios para grid_utils y agent
+- [ ] Correr agente en juego ls20 y analizar resultados
+- [ ] Mejorar prompt basado en resultados iniciales
 - [ ] Agregar retry logic para errores de API
-
-## BLOCKED
-(nada por ahora)
+- [ ] Agregar tests unitarios
 
 ## LATER
-- [ ] Mejorar prompt basado en resultados iniciales
 - [ ] Implementar loader + pipeline ARC-AGI-2 (estatico)
 - [ ] Explorar approach multimodal vs text-only
+- [ ] Test-time training (TTT) sobre ejemplos de cada tarea
 
 ## DONE (recent)
-- [x] Alinear repo con framework de skills — I-002 — 2026-03-31
-- [x] Implementar agente LLM basico para ARC-AGI-3 (vision + text) — I-001 — 2026-03-27
-- [x] Research ARC-AGI-2 y ARC-AGI-3 — I-001 — 2026-03-27
-- [x] Setup inicial del proyecto — I-001 — 2026-03-27
+- [x] Upgrade estructura a workflow estandar → I-002 — 2026-04-01
+- [x] Implementar agente LLM basico para ARC-AGI-3 (vision + text) → I-001 — 2026-03-27
+- [x] Research ARC-AGI-2 y ARC-AGI-3 → I-001 — 2026-03-27
+- [x] Setup inicial del proyecto → I-001 — 2026-03-27

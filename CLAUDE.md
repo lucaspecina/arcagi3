@@ -1,31 +1,33 @@
 # ARC-AGI 3 — Claude Code Configuration
 
 ## START HERE — Read these docs first
-1. **PROJECT.md** — Estrella polar: vision y LA PREGUNTA
+1. **PROJECT.md** — Estrella polar: vision y proposito
 2. **CURRENT_STATE.md** — Que hace el sistema HOY (friendly)
-3. **TODO.md** — Board operativo (NOW/NEXT/BLOCKED/LATER)
+3. **TODO.md** — Board operativo (que sigue)
 4. **CHANGELOG.md** — Historial de cambios
 5. **research/README.md** — Indice de investigacion y preguntas abiertas
 
-## LA PREGUNTA — the guiding question
+## LA PREGUNTA
 > Cual es el approach mas efectivo para resolver tareas ARC-AGI usando LLMs
 > como motor de razonamiento, y como lo validamos rapido?
+>
+> Aplicar al evaluar, disenar, priorizar, o revisar.
 
 ## Where to find what
-| I need to... | Go to... |
+| Necesito... | Ir a... |
 |---|---|
-| Understand the vision and principles | PROJECT.md |
-| See what works TODAY | CURRENT_STATE.md |
-| Know what is next | TODO.md |
-| See change history | CHANGELOG.md |
-| See work in progress | issues/ (active issues) |
-| Find research findings | research/notes/ and research/synthesis/ |
-| Configure autoresearch | AUTORESEARCH.md |
-| How to work on this project | This file (CLAUDE.md) |
+| Entender la vision y principios | PROJECT.md |
+| Ver que funciona HOY | CURRENT_STATE.md |
+| Saber que sigue | TODO.md |
+| Ver historial de cambios | CHANGELOG.md |
+| Ver trabajo en progreso | issues/ (issues activos) |
+| Encontrar findings de research | research/notes/ y research/synthesis/ |
+| Como trabajar en este proyecto | Este archivo (CLAUDE.md) |
+| Config de autoresearch | AUTORESEARCH.md |
 
 ## Project overview
 Investigacion para ARC Prize 2026. Pipeline de inferencia LLM para tareas ARC-AGI.
-Foco inicial en ARC-AGI-2 (estatico), research paralelo en ARC-AGI-3 (interactivo).
+Foco inicial en ARC-AGI-3 (interactivo), research paralelo en ARC-AGI-2 (estatico).
 Principio: empezar simple, medir todo, iterar rapido.
 
 ## Environment setup
@@ -38,7 +40,9 @@ cp .env.example .env       # configurar API keys
 - **Python 3.11+** — lenguaje principal
 - **openai SDK** — cliente para Azure AI Foundry (patron v1 API, NO AzureOpenAI)
 - **Azure AI Foundry** — plataforma LLM (DeepSeek, GPT, Llama, etc.)
-- **pytest** — testing
+- **arc-agi** — toolkit oficial para entornos ARC-AGI-3
+- **Pillow + numpy** — manipulacion de grillas e imagenes
+- **pytest + ruff** — testing y linting
 
 ## External services
 - **Azure AI Foundry**: `OpenAI(base_url=AZURE_FOUNDRY_BASE_URL, api_key=AZURE_INFERENCE_CREDENTIAL)`
@@ -48,24 +52,24 @@ cp .env.example .env       # configurar API keys
 ```
 PROJECT.md           # Vision, LA PREGUNTA, WHY
 CLAUDE.md            # Este archivo — config para Claude Code
-TODO.md              # Board operativo (NOW/NEXT/BLOCKED/LATER)
-CURRENT_STATE.md     # Estado actual del sistema
-CHANGELOG.md         # Historial
-AUTORESEARCH.md      # Modo autonomo (ON/OFF)
-issues/              # Tracking local (I-NNN)
-experiments/         # Experimentos formales (ENNN)
+TODO.md              # Board operativo (NOW/NEXT/BLOCKED/LATER/DONE)
+CURRENT_STATE.md     # Que existe hoy (friendly)
+CHANGELOG.md         # Historial con refs I-NNN
+AUTORESEARCH.md      # Config autoresearch (ON/OFF)
+issues/              # Issue tracking local (I-NNN-slug.md)
+experiments/         # Experimentos con manifest.yaml (ENNN-slug/)
 research/            # Investigacion
   README.md          # Indice de research lines
-  notes/             # Exploraciones y notas
+  notes/             # Exploraciones y dumps pesados
   synthesis/         # Conclusiones consolidadas
-  archive/           # Docs viejos/superados
+  archive/           # Docs superados
 src/arcagi3/         # Codigo fuente
   agent.py           # Agente LLM (Azure Foundry)
   grid_utils.py      # Conversiones grid->image/text
   run.py             # CLI entry point
+.claude/skills/      # Skills del proyecto (/test, /status, /review)
 pyproject.toml       # Dependencias y config
 .env.example         # Template de env vars
-.claude/skills/      # Skills del proyecto
 ```
 
 ## Code conventions
@@ -78,8 +82,8 @@ pyproject.toml       # Dependencias y config
 ```bash
 # Run agent
 python -m arcagi3.run --game ls20
-python -m arcagi3.run --game ls20 --no-vision    # text-only mode
-python -m arcagi3.run --list-games                # listar juegos
+python -m arcagi3.run --game ls20 --no-vision
+python -m arcagi3.run --list-games
 
 # Tests
 pytest
@@ -91,24 +95,25 @@ ruff format .
 ```
 
 ## Quality assurance
-- **Level 1 (Tests)**: pytest pre-commit — cada funcion tiene test
-- **Level 2 (System)**: Correr pipeline completo en subset de tareas ARC-AGI
-- **Level 3 (External)**: Submission a Kaggle leaderboard
+- **Level 1 (Tests)**: pytest + ruff pre-commit — cada funcion tiene test
+- **Level 2 (System)**: Correr agente en subset de tareas ARC-AGI con API real (no mocks)
+- **Level 3 (External)**: Submission a Kaggle/ARC Prize leaderboard
 
 ## Issue tracking
 - Issues en `issues/I-NNN-slug.md` con Status header + Log
-- Cross-ref con `I-NNN` en commits, codigo, docs, otros issues
+- Cross-ref con `I-NNN` en commits, codigo, docs, TODO.md, CHANGELOG.md
 - Experiments en `experiments/ENNN-slug/` con manifest.yaml
 - TODO.md = board operativo (NOW/NEXT/BLOCKED/LATER)
 - Ver dev-workflow skills para protocolo completo
 
 ## Commit workflow — MANDATORY
-1. Tests + Validation (Level 1 minimo)
-2. Codex review (si MCP disponible)
-3. Presentar al usuario en espanol — SIEMPRE, ESPERAR aprobacion
-4. Actualizar docs (trigger table) + Commit con Co-Authored-By e I-NNN refs
-5. Sugerir next steps
-
+```
+1. VALIDATE   — tests + lint
+2. REVIEW     — Codex review si MCP disponible (ver /codex-collab)
+3. PRESENT    — explicar en espanol, ESPERAR aprobacion
+4. DOCS       — actualizar docs afectados (trigger table)
+5. COMMIT     — con Co-Authored-By y refs I-NNN
+```
 **NUNCA commitear sin aprobacion explicita del usuario.**
 
 ## Autoresearch
@@ -117,42 +122,35 @@ ruff format .
 - Commits + pushes en branch de autoresearch
 - Status header en issues = memoria persistente
 - Stop conditions obligatorias
-- Ver dev-workflow/autoresearch.md para protocolo completo
+- NO modificar PROJECT.md ni CURRENT_STATE.md en branches de autoresearch
 
 ## Document maintenance — trigger table
-| What changed | Documents to update |
+| Que cambio | Documentos a actualizar |
 |---|---|
-| Started working on an issue | `issues/I-NNN.md` Status → active. `TODO.md` move to NOW. |
-| Completed a significant step | `issues/I-NNN.md` update Status header + add Log entry. |
-| Completed a task | `TODO.md` mark done. `CHANGELOG.md` add entry with I-NNN ref. |
-| Ran an experiment | `experiments/ENNN/manifest.yaml` create. `issues/I-NNN.md` add EXP entry. |
-| Closed an issue | `issues/I-NNN.md` Conclusion + Status. `TODO.md` move to DONE. `CHANGELOG.md` if code changed. Evaluate `research/notes/` → `research/archive/`. |
-| Added/removed a file or module | `CLAUDE.md` project structure. `CURRENT_STATE.md` modules. |
-| Changed an API signature | `CURRENT_STATE.md` Key APIs section. |
-| Changed test count | `CURRENT_STATE.md` test coverage section. |
-| Added a dependency | `pyproject.toml` AND `CLAUDE.md` tech stack. |
-| Changed a convention | `CLAUDE.md` update immediately. |
-| Changed scope or vision | `PROJECT.md` first, propagate to `CLAUDE.md` and `TODO.md`. |
-| Deep research done | `research/notes/` + ref from `issues/I-NNN.md`. |
-| Research conclusion reached | `research/synthesis/` + close or update issue. |
-| Research becomes decision | Promote to `PROJECT.md`. Update issue status. |
-| New issue created | `issues/I-NNN.md` create. `TODO.md` add to appropriate section. |
-| Renamed/removed a function or module | Search ALL docs, skills, memories for references → update or remove. |
-| Abandoned an issue | `issues/I-NNN.md` document why. `TODO.md` remove or note abandoned. |
-| Changed project skills | Verify `CLAUDE.md` skills/commands section still accurate. |
+| Empezo trabajo en issue | `issues/I-NNN.md` Status → active. `TODO.md` mover a NOW. |
+| Completo paso significativo | `issues/I-NNN.md` update Status + Log entry. |
+| Corrio experimento | `experiments/ENNN/manifest.yaml` crear. `issues/I-NNN.md` add EXP. |
+| Cerro issue | `issues/I-NNN.md` Conclusion + Status. `TODO.md` → DONE. `CHANGELOG.md`. |
+| Completo tarea | `TODO.md` mark done. `CHANGELOG.md` con ref I-NNN. |
+| Agrego/removio archivo o modulo | `CLAUDE.md` project structure. `CURRENT_STATE.md`. |
+| Cambio API signature | `CURRENT_STATE.md`. |
+| Cambio test count | `CURRENT_STATE.md` test section. |
+| Agrego dependencia | `pyproject.toml` AND `CLAUDE.md` tech stack. |
+| Cambio convencion | `CLAUDE.md` actualizar inmediatamente. |
+| Cambio scope o vision | `PROJECT.md` primero, propagar a `CLAUDE.md` y `TODO.md`. |
+| Research profundo | `research/notes/` + ref desde `issues/I-NNN.md`. |
+| Conclusion de research | `research/synthesis/` + update issue. |
+| Research → decision | Promover a `PROJECT.md`. Update issue. |
+| Cambio project skills | Verificar seccion skills/commands de `CLAUDE.md`. |
 
 ## Cleanup and maintenance
-- "Updating" means the FULL ecosystem: docs, skills, memories, scripts, configs
-- If a change makes code/tests/scripts obsolete → DELETE THEM (git has history)
-- If a doc references something that no longer exists → FIX the reference
-- After major milestones: cleanup pass (stale refs, dead code, orphaned files)
-- When closing issues: evaluate if research/notes/ can move to research/archive/
-
-## Worktrees
-When running multiple Claude Code sessions on the same repo, each session
-MUST work in its own git worktree. Main session consolidates doc changes.
+- "Actualizar" = el ecosistema COMPLETO: docs, skills, memorias, scripts, configs
+- Si un cambio hace codigo/tests/scripts obsoletos → **ELIMINARLOS** (git tiene historia)
+- Si un doc referencia algo que ya no existe → **ARREGLAR la referencia**
+- Despues de milestones grandes: cleanup pass (refs stale, dead code, orphaned files)
+- Al cerrar issues: evaluar si research/notes/ puede moverse a research/archive/
 
 ## Git conventions
 - Branch: `main` para ahora (proyecto de research, una persona)
-- Commits: imperative mood, en ingles, concisos
+- Commits: imperative mood, en ingles, concisos, con ref I-NNN cuando aplica
 - NUNCA force push, NUNCA commit sin aprobacion
