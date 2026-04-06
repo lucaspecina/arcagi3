@@ -44,6 +44,11 @@ Esto significa:
   potencia con estructura.
 - **Generalizable** — cada pieza de codigo debe funcionar en TODOS los juegos.
   Si solo sirve para un juego, no sirve.
+- **CERO codigo game-specific** — NUNCA escribir BFS, maze mappers, greedy
+  navigators, Sokoban solvers, o cualquier logica que solo funcione en un
+  juego particular. Si el LLM no puede descubrir algo, mejorar los prompts
+  y la estructura — no reemplazarlo con un solver programatico. El test:
+  "funciona esto identico en los 25 juegos?" Si no → no lo hagas.
 
 Las palancas del harness son:
 - **Buenas preguntas** — prompts que fuerzan al LLM a razonar mejor
@@ -79,6 +84,16 @@ haga esas preguntas a si mismo.
 6. **Multi-model por diseño** — el harness puede usar cualquier modelo o combinacion
 7. **GENERALIZABLE siempre** — NUNCA codigo game-specific. Todo debe funcionar en todos los juegos
 8. **El LLM es el cerebro** — no reemplazarlo con solvers programaticos. Potenciarlo con estructura
+
+## Modelo y presupuesto
+- **SIEMPRE usar GPT-5.4** — es el mejor modelo disponible. No downgradeamos.
+- **No preocuparse por el budget de API calls** — el presupuesto existe para usarse.
+  Priorizar velocidad de iteracion sobre ahorro de tokens.
+
+## Juegos de analisis
+Los primeros analisis e iteraciones se hacen sobre **ls20** (principal) y **g50t**
+(secundario). Todo el codigo debe ser GENERALIZABLE a los 25 juegos — estos dos
+son solo el campo de pruebas para validar que la arquitectura funciona.
 
 ## What success looks like
 - **Score competitivo en ARC-AGI-3 leaderboard** — top positions

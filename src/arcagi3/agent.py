@@ -50,7 +50,7 @@ ACTION_LABELS = {
 # --- ANALYZER PROMPT ---
 ANALYZER_PROMPT = """\
 You are analyzing a frame from an ARC-AGI-3 game — a 64x64 abstract visual puzzle.
-Your job is ONLY to perceive and interpret. You do NOT choose actions.
+Your job is ONLY to perceive, categorize, and interpret. You do NOT choose actions.
 
 The harness provides you with:
 - The current frame (image)
@@ -58,24 +58,112 @@ The harness provides you with:
 - Tracker data (avatar detection, resource bar warnings)
 - Your previous analysis (if any)
 
-Answer these questions precisely:
+You MUST answer ALL of these sections with SPECIFIC details:
 
-1. CONTROLLED OBJECT: What object do you control? What color/shape is it? Where is it now?
-2. RESOURCE INDICATORS: Are there bars, counters, or indicators? Which are health/cost vs progress?
-3. SALIENT TARGETS: What objects look like goals, pickups, or interactive elements? Where?
-4. SPATIAL LAYOUT: Describe the layout — walls, paths, rooms, doors, connections.
-5. CURRENT HYPOTHESIS: What do you think the goal is? What evidence supports this?
-6. CONTRADICTIONS: Does anything contradict your previous analysis? What needs revision?
+== 1. FULL SCENE DESCRIPTION ==
+Describe EVERYTHING you see as if explaining to someone who cannot see the image.
+What is the overall structure? What distinct areas or regions exist?
+What colors dominate? What is the general layout?
 
-Respond with a JSON object:
+== 2. ELEMENT CLASSIFICATION ==
+Classify EVERY visual element you can see into one of these categories:
+
+  BACKGROUND/WALLS: Static elements that form the level structure.
+    What color are they? Where are they? Do they form corridors, rooms, barriers?
+
+  WALKABLE AREAS / PATHS: Where can the player move?
+    What color represents the floor/path? How are paths connected?
+
+  PLAYER / CONTROLLED OBJECT: What do you control?
+    What color? What shape? Where is it? What objects move WITH it?
+    How do you know this is the player? (cite evidence from action effects)
+
+  META-INFORMATION / HUD: Elements that show game state, NOT part of the level.
+    Health bars, resource indicators, score displays, timers, progress bars.
+    For each: what does it represent? Is depleting it BAD (cost/health) or
+    GOOD (progress)? At what rate is it changing? How much is left?
+
+  POTENTIAL TARGETS / GOALS: Objects that MIGHT be objectives.
+    Why do they look like goals? (distinctive color, isolated position, etc.)
+    Have you interacted with them yet? What happened when you did?
+
+  POTENTIAL INTERACTIVE OBJECTS: Things you might be able to interact with.
+    Doors, switches, items, NPCs, collectibles, keys, etc.
+    What makes you think they are interactive? Have you tested them?
+
+  UNKNOWN / UNCLASSIFIED: Things you see but dont understand yet.
+    Describe them precisely. What experiments would reveal their purpose?
+
+== 3. SPATIAL MAP ==
+Describe the level as a map: where are walls, where are openings,
+where are corridors, rooms, dead ends. Where is the player right now?
+What areas are reachable? What areas havent you explored yet?
+Where are the interesting objects relative to the player?
+
+== 4. GOAL HYPOTHESES AND PLANS ==
+List 3-5 hypotheses for what the objective is. Confidences must sum to ~100%.
+For EACH hypothesis, include a concrete PLAN — a sequence of actions to test it.
+
+== 5. BIGGEST UNKNOWNS ==
+The 3 things you are MOST uncertain about. For each: what specific
+action or experiment would reduce that uncertainty?
+
+Respond with JSON:
 {
-  "controlled_object": "description of what you control and where it is",
-  "resource_bars": ["bar description and whether it's health/cost or progress"],
-  "targets": ["potential goal/interactive objects with locations"],
-  "layout": "spatial description of the level",
-  "goal_hypothesis": "what you think wins the level, with evidence",
-  "contradictions": "what changed or was wrong in previous analysis",
-  "confidence": "low|medium|high"
+  "scene_description": "full visual description of everything you see",
+  "classification": {
+    "background_walls": [
+      {"color": "gray", "description": "walls forming corridors", "positions": "top half of screen"}
+    ],
+    "walkable_paths": [
+      {"color": "black", "description": "corridors between walls", "positions": "center area"}
+    ],
+    "player": {
+      "color": "blue", "shape": "small square", "position": "(36,43)",
+      "attached_objects": "orange pixels move with it",
+      "evidence": "moves consistently when actions are taken"
+    },
+    "meta_info": [
+      {"element": "yellow bar at bottom", "type": "health/cost",
+       "current_value": "37px", "rate_of_change": "-5px per move",
+       "remaining": "about 7 moves left", "interpretation": "each move costs resources"}
+    ],
+    "potential_targets": [
+      {"color": "white", "position": "(10,15)", "why_target": "isolated, distinctive color",
+       "tested": false, "interaction_result": "not yet tested"}
+    ],
+    "potential_interactive": [
+      {"color": "red", "position": "(25,30)", "why_interactive": "small isolated object near path",
+       "tested": false}
+    ],
+    "unknown": [
+      {"description": "small green pixel at (50,5)", "experiment": "navigate near it"}
+    ]
+  },
+  "spatial_map": "description of level layout as a map, with player position and key landmarks",
+  "goal_hypotheses": [
+    {
+      "rank": 1, "goal": "navigate to the white object at top-left",
+      "confidence_pct": 40,
+      "evidence_for": "it is isolated and distinctive, common pattern for goals",
+      "evidence_against": "no evidence it triggers anything",
+      "plan": ["ACTION3", "ACTION3", "ACTION1", "ACTION1", "ACTION1"],
+      "plan_reasoning": "move left then up to reach the white object"
+    },
+    {
+      "rank": 2, "goal": "collect all red objects scattered in the level",
+      "confidence_pct": 30,
+      "evidence_for": "there are multiple red objects at different positions",
+      "evidence_against": "havent tried touching one yet",
+      "plan": ["ACTION2", "ACTION4", "ACTION4"],
+      "plan_reasoning": "move toward the nearest red object to test interaction"
+    }
+  ],
+  "unknowns": [
+    {"question": "what does the red object do when touched?",
+     "experiment": "navigate to it and step on it"}
+  ],
+  "contradictions": "what changed or was wrong vs previous analysis"
 }
 """
 
@@ -105,20 +193,49 @@ unverified and whether you should test it.
 
 You CANNOT skip any belief. Every single one needs a verdict + justification.
 
-## STEP 4: NEW DISCOVERIES
+## STEP 4: CAUSAL ANALYSIS — THE "WHY" (MOST IMPORTANT STEP)
+For EVERY action result, ask yourself WHY:
+- If an action WORKED: WHY did it work? What conditions made it possible?
+- If an action FAILED or had no effect: WHY? What BLOCKED it? What caused the failure?
+  - Is there a wall? WHERE is the wall? What color is it?
+  - Is there an object in the way? WHAT object? Could you interact with it?
+  - Does the action only work in certain conditions? WHAT conditions?
+- If you DIED: WHY? What killed you? What object/position/condition caused death?
+  - Was it a color? A position? A timing? A specific object?
+- Form CAUSAL HYPOTHESES: "X happened BECAUSE Y"
+  - Example: "ACTION3 had no effect BECAUSE there is a gray wall at (30,20) blocking leftward movement"
+  - Example: "I died BECAUSE the blue object touched the red object at (15,25)"
+- These causal hypotheses MUST be saved in your beliefs and reviewed each step.
+  They can be changed or dropped if new evidence contradicts them.
+
+Look at the ACTION EFFECT MAP. If an action had DIFFERENT effects at different \
+positions (worked sometimes, failed other times):
+- WHAT WAS DIFFERENT about the positions where it worked vs didn't?
+- Were there adjacent objects to interact with? Walls blocking? Different surroundings?
+- Form a RULE about WHEN/WHERE this action works, not just WHAT it does.
+
+## STEP 5: NEW DISCOVERIES
 What did you learn that isn't captured in any existing belief?
+What new CAUSAL relationships did you observe?
 
-## STEP 5: STRATEGY CHECK
-- Am I making PROGRESS toward the goal? (count steps without progress)
-- If NOT progressing: is my goal WRONG? List 2 alternative goal hypotheses.
-- **MANDATORY: If steps_without_progress >= 5, you MUST change your goal hypothesis \
-to your best alternative. The current goal has FAILED. Do not keep it.**
-- What action sequence have I NOT tried that might reveal something new?
-- What is my BIGGEST uncertainty right now and how do I resolve it?
+## STEP 6: GOAL HYPOTHESES (MANDATORY — maintain 3-5 at all times)
+You MUST maintain 3-5 goal hypotheses ranked by confidence. For EACH:
+- State the hypothesis clearly
+- Confidence percentage (0-100%). All confidences must sum to ~100%.
+- Key evidence FOR and AGAINST
+- What would CONFIRM or REFUTE it (specific test)
+**If steps_without_progress >= 5, your TOP hypothesis has FAILED. Promote \
+your #2 hypothesis to #1 and demote the old #1 below 20%.**
 
-## STEP 6: UPDATED BELIEFS
-Output the COMPLETE updated belief set incorporating all changes from step 3-5.
-**If you changed the goal in step 5, the new goal MUST appear in updated_beliefs.**
+## STEP 7: UNCERTAINTY REDUCTION
+- What are your TOP 3 unknowns right now?
+- For EACH unknown: what specific action/experiment would resolve it?
+- What is the SINGLE most valuable thing you could learn right now?
+- What action would give you the most INFORMATION (not necessarily progress)?
+
+## STEP 8: UPDATED BELIEFS
+Output the COMPLETE updated belief set incorporating all changes.
+**Controls MUST include WHEN/WHERE each action works, not just what it does.**
 
 Respond with JSON:
 {
@@ -128,22 +245,40 @@ Respond with JSON:
     {"id": 0, "belief": "original text", "verdict": "KEEP|CHANGE|DROP", \
 "justification": "why, citing evidence from this step", "corrected": "new text if CHANGE"}
   ],
+  "causal_analysis": "WHY did things happen the way they did? What CAUSED each result?",
+  "causal_hypotheses": [
+    {"observation": "what happened", "cause": "WHY it happened", "confidence_pct": 70,
+     "test": "how to verify this causal link"}
+  ],
   "new_discoveries": ["discovery 1"],
+  "goal_hypotheses": [
+    {"rank": 1, "goal": "what to do", "confidence_pct": 50,
+     "evidence_for": "specific evidence", "evidence_against": "specific evidence",
+     "confirm_test": "action that would prove this", "refute_test": "action that would disprove this"},
+    {"rank": 2, "goal": "alternative", "confidence_pct": 30, "...": "..."},
+    {"rank": 3, "goal": "alternative", "confidence_pct": 20, "...": "..."}
+  ],
+  "uncertainty_reduction": {
+    "top_unknowns": [
+      {"question": "what is X?", "experiment": "try Y to find out"}
+    ],
+    "most_valuable_info": "the single thing that would help most",
+    "best_info_action": "the action that maximizes information gain"
+  },
   "strategy_check": {
     "making_progress": true/false,
     "steps_without_progress": N,
-    "alternative_goals": ["if not progressing, 2 alternatives"],
-    "untried_sequences": ["action sequences not yet attempted"],
-    "biggest_uncertainty": "what I most need to figure out"
+    "untried_sequences": ["action sequences not yet attempted"]
   },
   "updated_beliefs": {
-    "controls": {"ACTION1": "observed effect (CONFIRMED/unverified/untested)", ...},
+    "controls": {"ACTION1": "WHEN it works + WHAT it does + WHY it fails when it does", "...": "..."},
     "rules": ["confirmed rule with evidence count"],
-    "goal": "hypothesis (confidence: low/medium/high, evidence: X)",
-    "objects": ["object descriptions with locations"],
-    "dangers": ["things that cause damage or game over"],
-    "unknowns": ["things I still need to test"],
-    "failed_approaches": ["what I tried that didn't work and why"]
+    "causal_model": ["X happens BECAUSE Y (confidence N%, tested N times)"],
+    "goal": "top hypothesis (confidence: N%, evidence: X)",
+    "objects": ["object descriptions with locations and WHAT ROLE they play"],
+    "dangers": ["what causes damage/death and WHY"],
+    "unknowns": ["things I still need to test and HOW I would test them"],
+    "failed_approaches": ["what I tried, what happened, and WHY it failed"]
   }
 }
 """
@@ -157,6 +292,9 @@ RULES:
 - EFFICIENCY MATTERS: score = (human_actions/your_actions)². Fewer = better.
 - TRUST YOUR BELIEFS: they were just validated by the reflector. Act on them.
 - If there are UNTESTED actions, prioritize testing them — one at a time.
+- ACTION EFFECTS ARE POSITION-DEPENDENT: check the ACTION EFFECT MAP. An action \
+that worked at one position may not work at another. Plan based on WHERE you are.
+- RESET restarts the level. NEVER use RESET as a movement action.
 - NEVER repeat a failed approach. Check "failed_approaches" in your beliefs.
 - If the same action had no effect, DO NOT try it again from the same position.
 - If stuck, try a COMPLETELY DIFFERENT action or sequence.
@@ -193,6 +331,8 @@ class AgentConfig:
     show_raw_prompt: bool = False
     show_window: bool = False
     analyze_every: int = 3  # Run analyzer every N steps (1 = every step)
+    systematic_explore: bool = True  # Phase 1: harness-driven exploration
+    prior_beliefs: str = ""  # Inject beliefs from a previous run
 
     def __post_init__(self):
         if not self.base_url:
@@ -215,6 +355,8 @@ class StepRecord:
     state: str = ""
     levels_completed: int = 0
     diff_summary: str = ""
+    avatar_pos: tuple[int, int] | None = None  # Position BEFORE action
+    had_effect: bool = False
 
 
 @dataclass
@@ -236,6 +378,8 @@ class AgentState:
     # Analyzer state
     last_analysis: str = ""
     analysis_history: list[str] = field(default_factory=list)
+    # Contextual action tracking: action → [(position, had_effect, summary)]
+    action_context_log: dict = field(default_factory=dict)
 
 
 def create_client(config: AgentConfig):
@@ -259,6 +403,38 @@ def prompt_human(prompt_text: str) -> str | None:
         return user_input.strip()
     except (KeyboardInterrupt, EOFError):
         return None
+
+
+def build_action_context_summary(state: AgentState) -> str:
+    """Build a position-aware summary of action effects.
+
+    Shows WHERE each action worked vs didn't, so the LLM can infer
+    position-dependent mechanics (e.g., swaps only with adjacent objects).
+    """
+    if not state.action_context_log:
+        return ""
+
+    lines = []
+    for action, entries in sorted(state.action_context_log.items()):
+        if action == "RESET":
+            continue  # RESET handled separately
+        worked = [e for e in entries if e["had_effect"]]
+        failed = [e for e in entries if not e["had_effect"]]
+        line = f"  {action}: worked {len(worked)}/{len(entries)} times"
+        if worked:
+            examples = worked[-2:]  # Last 2 successes
+            wheres = [f"at ({e['pos'][0]},{e['pos'][1]}): {e['summary'][:40]}" for e in examples if e.get("pos")]
+            if wheres:
+                line += f" — " + "; ".join(wheres)
+        if failed:
+            fail_pos = [f"({e['pos'][0]},{e['pos'][1]})" for e in failed[-2:] if e.get("pos")]
+            if fail_pos:
+                line += f" | NO effect at: {', '.join(fail_pos)}"
+        lines.append(line)
+
+    if not lines:
+        return ""
+    return "=== ACTION EFFECT MAP (position-aware) ===\n" + "\n".join(lines) + "\n==="
 
 
 def build_context_text(
@@ -290,22 +466,40 @@ def build_context_text(
 
         untested = [n for n in action_names if n not in state.actions_tested and n != "RESET"]
         if untested:
-            parts.append(f"⚠ UNTESTED actions: {', '.join(untested)}")
+            parts.append(f"UNTESTED actions: {', '.join(untested)}")
 
-    # Programmatic diff
+    # Programmatic diff — add RESET annotation
     if state.diff_text:
-        parts.append(f"\n=== DIFF (computed, accurate) ===\n{state.diff_text}\n===")
+        diff_label = state.diff_text
+        if state.steps and state.steps[-1].action == "RESET":
+            diff_label = (
+                "WARNING: RESET was used — level restarted to initial state. "
+                "Any position changes are from RETURNING TO START, not movement.\n"
+                + diff_label
+            )
+        parts.append(f"\n=== DIFF (computed, accurate) ===\n{diff_label}\n===")
 
-    # Avatar tracker
+    # Avatar tracker — make action map PROMINENT and authoritative
     avatar_info = avatar_tracker.get_avatar_info()
-    if avatar_info:
-        parts.append(f"\n=== AVATAR TRACKER ===\n{avatar_info}")
-        action_map = avatar_tracker.get_action_map()
-        if action_map:
-            parts.append("Action → Effect mapping:")
-            for a, desc in action_map.items():
-                parts.append(f"  {a}: {desc}")
-        parts.append("===")
+    action_map = avatar_tracker.get_action_map()
+    if action_map:
+        parts.append("\n--- CONFIRMED ACTION EFFECTS (computed from observations, trust this) ---")
+        for a, desc in action_map.items():
+            parts.append(f"  {a}: {desc}")
+        # Show actions with no observed movement
+        if state.available_actions:
+            all_actions = {f"ACTION{aid}" for aid in state.available_actions if aid != 0}
+            mapped = set(action_map.keys())
+            unmapped = all_actions - mapped - {"RESET"}
+            for a in sorted(unmapped):
+                if a in state.actions_tested:
+                    parts.append(f"  {a}: NO avatar movement observed (tested)")
+                else:
+                    parts.append(f"  {a}: UNTESTED")
+        parts.append("  RESET: RESTARTS the level (returns to initial state, NOT movement)")
+        parts.append("--- END ACTION EFFECTS ---")
+    elif avatar_info:
+        parts.append(f"\n=== AVATAR TRACKER ===\n{avatar_info}\n===")
 
     # Bar tracker warnings
     bar_warnings = bar_tracker.get_bar_warnings()
@@ -316,22 +510,28 @@ def build_context_text(
     if state.frame_analysis:
         parts.append(f"\n=== FRAME OBJECTS ===\n{state.frame_analysis}\n===")
 
+    # Position-aware action effects (critical for learning mechanics)
+    action_ctx = build_action_context_summary(state)
+    if action_ctx:
+        parts.append(f"\n{action_ctx}")
+
     # State novelty
     current_hash = grid_hash(grid)
     is_novel = current_hash not in state.state_hashes
     parts.append(f"State: {'NEW' if is_novel else 'REPEATED'}")
     if state.no_progress_count >= 3:
-        parts.append(f"⚠ NO PROGRESS for {state.no_progress_count} turns! Change approach!")
+        parts.append(f"WARNING: NO PROGRESS for {state.no_progress_count} turns! Change approach!")
 
     # Structured action history (last 10 steps as table)
     if state.steps:
         parts.append("\n=== ACTION HISTORY (most recent) ===")
-        parts.append("Step | Action  | Result      | What changed")
-        parts.append("-----|---------|-------------|---------------------------")
+        parts.append("Step | Action  | Pos(x,y)  | Result      | What changed")
+        parts.append("-----|---------|-----------|-------------|---------------------------")
         for s in state.steps[-10:]:
-            diff = s.diff_summary[:50] if s.diff_summary else "no data"
+            diff = s.diff_summary[:45] if s.diff_summary else "no data"
             status = "ok" if s.state == "IN_PROGRESS" else s.state
-            parts.append(f" {s.action_num:>3} | {s.action:<7} | {status:<11} | {diff}")
+            pos = f"({s.avatar_pos[0]},{s.avatar_pos[1]})" if s.avatar_pos else "(?)"
+            parts.append(f" {s.action_num:>3} | {s.action:<7} | {pos:<9} | {status:<11} | {diff}")
         parts.append("===")
 
     # Exploration controller report
@@ -383,8 +583,8 @@ def run_analyzer(
             model=config.model,
             messages=messages,
             temperature=0.3,  # Lower temp for perception accuracy
-            max_completion_tokens=1000,
-            timeout=120,
+            max_completion_tokens=3000,
+            timeout=180,
         )
         analysis = response.choices[0].message.content or ""
     except Exception as e:
@@ -478,7 +678,7 @@ def run_reflector(
     # Harness-enforced stagnation warning
     if state.no_progress_count >= 5:
         text += (
-            f"\n\n⚠⚠⚠ STAGNATION ALERT: {state.no_progress_count} steps without progress! ⚠⚠⚠\n"
+            f"\n\n*** STAGNATION ALERT: {state.no_progress_count} steps without progress! ***\n"
             "Your current goal hypothesis has FAILED. You MUST change it.\n"
             "Pick your best alternative goal and commit to it in updated_beliefs.\n"
             "Also list what you tried that didn't work in failed_approaches."
@@ -503,8 +703,8 @@ def run_reflector(
             model=config.model,
             messages=messages,
             temperature=0.3,
-            max_completion_tokens=2000,
-            timeout=120,
+            max_completion_tokens=3000,
+            timeout=180,
         )
         reflection = response.choices[0].message.content or ""
     except Exception as e:
@@ -527,13 +727,17 @@ def run_reflector(
                 new_goal = beliefs.get("goal", "")
                 # Check if goal is essentially the same (fuzzy match)
                 if old_goal and new_goal and old_goal[:40] == new_goal[:40]:
-                    # Goal didn't change despite stagnation — force alternatives
-                    strategy = parsed.get("strategy_check", {})
-                    alts = []
-                    if isinstance(strategy, dict):
-                        alts = strategy.get("alternative_goals", [])
-                    if alts:
-                        beliefs["goal"] = f"{alts[0]} (FORCED by harness — old goal stagnated)"
+                    # Goal didn't change despite stagnation — force #2 hypothesis
+                    goal_hyps = parsed.get("goal_hypotheses", [])
+                    alt_goal = None
+                    for gh in goal_hyps:
+                        if isinstance(gh, dict) and gh.get("rank", 0) == 2:
+                            alt_goal = gh.get("goal", "")
+                            break
+                    if not alt_goal and len(goal_hyps) >= 2:
+                        alt_goal = goal_hyps[1].get("goal", "") if isinstance(goal_hyps[1], dict) else str(goal_hyps[1])
+                    if alt_goal:
+                        beliefs["goal"] = f"{alt_goal} (FORCED by harness — old goal stagnated)"
                         if "failed_approaches" not in beliefs:
                             beliefs["failed_approaches"] = []
                         beliefs["failed_approaches"].append(
@@ -702,6 +906,390 @@ class LiveDisplay:
         self._plt.close(self._fig)
 
 
+def _print_analysis(raw_analysis: str) -> None:
+    """Pretty-print the Analyzer's response."""
+    parsed = parse_response(raw_analysis)
+    if parsed.get("error"):
+        print(f"  [ANALYZER] (raw) {raw_analysis[:300]}...")
+        return
+
+    sep = "-" * 70
+
+    # Scene description
+    scene = parsed.get("scene_description", "")
+    if scene:
+        print(f"\n  SCENE")
+        for line in scene[:300].split(". "):
+            if line.strip():
+                print(f"  | {line.strip()}.")
+
+    # Classification
+    classif = parsed.get("classification", {})
+    if isinstance(classif, dict):
+        print(f"\n  ELEMENT CLASSIFICATION")
+
+        bg = classif.get("background_walls", [])
+        if bg:
+            print(f"  | WALLS/BACKGROUND:")
+            for item in bg[:5]:
+                if isinstance(item, dict):
+                    print(f"  |   {item.get('color', '?')}: {item.get('description', '?')} ({item.get('positions', '?')})")
+
+        paths = classif.get("walkable_paths", [])
+        if paths:
+            print(f"  | WALKABLE PATHS:")
+            for item in paths[:5]:
+                if isinstance(item, dict):
+                    print(f"  |   {item.get('color', '?')}: {item.get('description', '?')} ({item.get('positions', '?')})")
+
+        player = classif.get("player", {})
+        if isinstance(player, dict) and player:
+            print(f"  | PLAYER: {player.get('color', '?')} {player.get('shape', '?')} at {player.get('position', '?')}")
+            att = player.get("attached_objects", "")
+            if att:
+                print(f"  |   attached: {att}")
+
+        meta = classif.get("meta_info", [])
+        if meta:
+            print(f"  | META-INFO (HUD):")
+            for item in meta[:5]:
+                if isinstance(item, dict):
+                    el = item.get("element", "?")
+                    typ = item.get("type", "?")
+                    val = item.get("current_value", "?")
+                    rate = item.get("rate_of_change", "?")
+                    rem = item.get("remaining", "?")
+                    print(f"  |   {el}: {typ}, value={val}, rate={rate}, remaining={rem}")
+
+        targets = classif.get("potential_targets", [])
+        if targets:
+            print(f"  | POTENTIAL TARGETS:")
+            for item in targets[:5]:
+                if isinstance(item, dict):
+                    print(f"  |   {item.get('color', '?')} at {item.get('position', '?')}: {item.get('why_target', '?')[:60]}")
+                    if item.get("tested"):
+                        print(f"  |     result: {item.get('interaction_result', '?')[:60]}")
+
+        interactive = classif.get("potential_interactive", [])
+        if interactive:
+            print(f"  | INTERACTIVE:")
+            for item in interactive[:5]:
+                if isinstance(item, dict):
+                    print(f"  |   {item.get('color', '?')} at {item.get('position', '?')}: {item.get('why_interactive', '?')[:60]}")
+
+        unknown = classif.get("unknown", [])
+        if unknown:
+            print(f"  | UNKNOWN:")
+            for item in unknown[:5]:
+                if isinstance(item, dict):
+                    print(f"  |   {item.get('description', '?')[:60]} -> test: {item.get('experiment', '?')[:40]}")
+
+    # Spatial map
+    spatial = parsed.get("spatial_map", "")
+    if spatial:
+        print(f"\n  SPATIAL MAP")
+        print(f"  | {spatial[:200]}")
+
+    # Goal hypotheses with plans
+    goals = parsed.get("goal_hypotheses", [])
+    if goals:
+        print(f"\n  GOAL HYPOTHESES")
+        for gh in goals[:5]:
+            if isinstance(gh, dict):
+                rank = gh.get("rank", "?")
+                conf = gh.get("confidence_pct", "?")
+                goal = gh.get("goal", "?")
+                print(f"  | #{rank} ({conf}%) {goal[:80]}")
+                ef = gh.get("evidence_for", "")
+                ea = gh.get("evidence_against", "")
+                if ef:
+                    print(f"  |     FOR: {ef[:80]}")
+                if ea:
+                    print(f"  |     AGAINST: {ea[:80]}")
+                plan = gh.get("plan", [])
+                pr = gh.get("plan_reasoning", "")
+                if plan:
+                    print(f"  |     PLAN: {plan[:8]}{'...' if len(plan) > 8 else ''}")
+                if pr:
+                    print(f"  |     WHY: {pr[:80]}")
+
+    # Unknowns
+    unknowns = parsed.get("unknowns", [])
+    if unknowns:
+        print(f"\n  UNKNOWNS")
+        for u in unknowns[:5]:
+            if isinstance(u, dict):
+                print(f"  | ? {u.get('question', '?')[:60]}")
+                print(f"  |   -> {u.get('experiment', '?')[:60]}")
+
+    print(f"  {sep}")
+
+
+def run_systematic_exploration(
+    env,
+    state: AgentState,
+    config: AgentConfig,
+    avatar_tracker: AvatarTracker,
+    bar_tracker: BarTracker,
+    exploration: ExplorationController,
+    grid: np.ndarray,
+    display=None,
+    frames_path=None,
+    saved_frames=None,
+) -> tuple[np.ndarray, int]:
+    """Phase 1: Harness-driven systematic exploration.
+
+    Tests each available action from the starting position. After each test,
+    RESET to start so every action is tested from the SAME state. Uses
+    diff-based movement detection (not avatar_tracker which needs multiple obs).
+
+    Returns: (current_grid, steps_used)
+    """
+    print("\n  ═══ PHASE 1: SYSTEMATIC EXPLORATION (harness-driven, no LLM) ═══")
+
+    actions_to_test = []
+    for aid in state.available_actions:
+        if aid == 0:
+            continue  # Skip RESET
+        actions_to_test.append(f"ACTION{aid}")
+
+    step_count = 0
+    initial_grid = grid.copy()
+    explore_results: dict[str, dict] = {}  # action → {movements, direction, had_effect, etc}
+
+    # Test each action from the SAME starting position
+    for action_name in actions_to_test:
+        game_action = ACTION_MAP[action_name]
+        label = ACTION_LABELS.get(action_name, action_name)
+
+        print(f"\n  [EXPLORE] Testing {action_name} from start...")
+
+        state.prev_grid = grid
+        obs = env.step(game_action, data={})
+        step_count += 1
+
+        if obs is None:
+            continue
+
+        if obs.frame:
+            grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
+        if hasattr(obs, "available_actions") and obs.available_actions:
+            state.available_actions = list(obs.available_actions)
+
+        diff_result = compute_diff(state.prev_grid, grid)
+        state.diff_text = diff_result["description"]
+        avatar_tracker.update(action_name, diff_result)
+        bar_tracker.update(grid, step_count)
+        state.actions_tested.add(action_name)
+
+        # Detect movement from diff (any object that moved)
+        movements = diff_result.get("movements", [])
+        swaps = diff_result.get("swaps", [])
+        had_movement = len(movements) > 0
+        n_changed = diff_result.get("changed_cells", 0)
+        effect_desc = "NO effect"
+        direction = None
+        moved_from = None
+        moved_to = None
+
+        if swaps:
+            # Swap detected — report the first swap
+            s = swaps[0]
+            effect_desc = (
+                f"SWAP: {s['color_a_name']} at ({s['pos_a_x']},{s['pos_a_y']}) ↔ "
+                f"{s['color_b_name']} at ({s['pos_b_x']},{s['pos_b_y']})"
+            )
+            # Compute direction from the first object's movement
+            for m in movements:
+                if m["color"] == s["color_a"]:
+                    dx, dy = m["dx"], m["dy"]
+                    if abs(dy) > abs(dx):
+                        direction = "DOWN" if dy > 0 else "UP"
+                    elif abs(dx) > abs(dy):
+                        direction = "RIGHT" if dx > 0 else "LEFT"
+                    else:
+                        direction = f"dx={dx},dy={dy}"
+                    moved_from = (m["from_x"], m["from_y"])
+                    moved_to = (m["to_x"], m["to_y"])
+                    effect_desc = f"SWAP {direction}: object moved ({m['from_x']},{m['from_y']})→({m['to_x']},{m['to_y']})"
+                    break
+            had_movement = True
+        elif movements:
+            # Direct movement
+            m = movements[0]  # Most prominent movement
+            dx, dy = m["dx"], m["dy"]
+            if abs(dy) > abs(dx):
+                direction = "DOWN" if dy > 0 else "UP"
+            elif abs(dx) > abs(dy):
+                direction = "RIGHT" if dx > 0 else "LEFT"
+            else:
+                direction = f"dx={dx},dy={dy}"
+            moved_from = (m["from_x"], m["from_y"])
+            moved_to = (m["to_x"], m["to_y"])
+            effect_desc = f"{m['color_name']} moved {direction} ({m['from_x']},{m['from_y']})→({m['to_x']},{m['to_y']})"
+        elif n_changed > 0 and n_changed <= 5:
+            effect_desc = f"{n_changed} pixels changed (bar/minor)"
+
+        explore_results[action_name] = {
+            "direction": direction,
+            "had_movement": had_movement,
+            "effect_desc": effect_desc,
+            "movements": movements,
+            "swaps": swaps,
+        }
+
+        # Log to context
+        if action_name not in state.action_context_log:
+            state.action_context_log[action_name] = []
+        state.action_context_log[action_name].append({
+            "pos": moved_from,
+            "had_effect": had_movement,
+            "summary": effect_desc,
+        })
+
+        # Record step
+        record = StepRecord(
+            action_num=step_count,
+            action=action_name,
+            state=obs.state.name if obs.state else "UNKNOWN",
+            levels_completed=obs.levels_completed or 0,
+            diff_summary=effect_desc,
+            avatar_pos=moved_from,
+            had_effect=had_movement,
+        )
+        state.steps.append(record)
+
+        h = grid_hash(grid)
+        state.state_hashes.add(h)
+
+        print(f"    → {action_name}: {effect_desc}")
+
+        if config.save_frames and frames_path:
+            img = grid_to_image(grid, scale=4)
+            img.save(frames_path / f"step_{step_count:03d}_{label.lower()}.png")
+            if saved_frames is not None:
+                saved_frames.append(img.copy())
+
+        if display:
+            display.update(grid, f"Explore: {label}")
+
+        # Check for game over
+        if obs.state == GameState.GAME_OVER:
+            print(f"    GAME OVER during exploration!")
+            obs = env.reset()
+            if obs and obs.frame:
+                grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
+                state.prev_grid = None
+            continue
+
+        # Don't reset between actions — some games need sequential
+        # state evolution for actions to have effect.
+
+    # Round 2: If we found actions that move, try untested directions
+    # from the current position (which has changed from round 1)
+    moved_actions = [a for a, r in explore_results.items() if r.get("had_movement")]
+    if moved_actions:
+        print(f"\n  [EXPLORE] Round 2: retesting from new position...")
+        for action_name in actions_to_test:
+            if explore_results.get(action_name, {}).get("had_movement"):
+                continue  # Already know this one works
+            game_action = ACTION_MAP[action_name]
+            label = ACTION_LABELS.get(action_name, action_name)
+
+            state.prev_grid = grid
+            obs = env.step(game_action, data={})
+            step_count += 1
+
+            if obs is None:
+                continue
+            if obs.frame:
+                grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
+            if hasattr(obs, "available_actions") and obs.available_actions:
+                state.available_actions = list(obs.available_actions)
+
+            diff_result = compute_diff(state.prev_grid, grid)
+            avatar_tracker.update(action_name, diff_result)
+            bar_tracker.update(grid, step_count)
+
+            movements = diff_result.get("movements", [])
+            swaps = diff_result.get("swaps", [])
+            had_movement = len(movements) > 0
+            effect_desc = "NO effect"
+            direction = None
+
+            if swaps:
+                s = swaps[0]
+                for m in movements:
+                    if m["color"] == s["color_a"]:
+                        dx, dy = m["dx"], m["dy"]
+                        if abs(dy) > abs(dx):
+                            direction = "DOWN" if dy > 0 else "UP"
+                        elif abs(dx) > abs(dy):
+                            direction = "RIGHT" if dx > 0 else "LEFT"
+                        else:
+                            direction = f"dx={dx},dy={dy}"
+                        effect_desc = f"SWAP {direction} (from new position)"
+                        break
+                had_movement = True
+            elif movements:
+                m = movements[0]
+                dx, dy = m["dx"], m["dy"]
+                if abs(dy) > abs(dx):
+                    direction = "DOWN" if dy > 0 else "UP"
+                elif abs(dx) > abs(dy):
+                    direction = "RIGHT" if dx > 0 else "LEFT"
+                else:
+                    direction = f"dx={dx},dy={dy}"
+                effect_desc = f"{m['color_name']} moved {direction} (from new position)"
+
+            if had_movement and direction:
+                explore_results[action_name] = {
+                    "direction": direction,
+                    "had_movement": True,
+                    "effect_desc": effect_desc,
+                    "movements": movements,
+                    "swaps": swaps,
+                }
+
+            if action_name not in state.action_context_log:
+                state.action_context_log[action_name] = []
+            state.action_context_log[action_name].append({
+                "pos": None, "had_effect": had_movement, "summary": effect_desc,
+            })
+
+            record = StepRecord(
+                action_num=step_count, action=action_name,
+                state=obs.state.name if obs.state else "UNKNOWN",
+                levels_completed=obs.levels_completed or 0,
+                diff_summary=effect_desc, had_effect=had_movement,
+            )
+            state.steps.append(record)
+            state.state_hashes.add(grid_hash(grid))
+            print(f"    → {action_name}: {effect_desc}")
+
+            if obs.state == GameState.GAME_OVER:
+                obs = env.reset()
+                if obs and obs.frame:
+                    grid = np.array(obs.frame[0]) if isinstance(obs.frame[0], list) else obs.frame[0]
+                break
+
+    # Build exploration summary using our own results (not avatar_tracker)
+    print(f"\n  ═══ EXPLORATION COMPLETE ({step_count} steps used) ═══")
+    print("  Action → Effect (from exploration):")
+    for action_name in actions_to_test:
+        r = explore_results.get(action_name, {})
+        effect = r.get("effect_desc", "not tested")
+        direction = r.get("direction")
+        if direction:
+            print(f"    {action_name}: {direction} — {effect}")
+        else:
+            print(f"    {action_name}: {effect}")
+    print("    RESET: Restarts the level (harness fact)")
+    print()
+
+    return grid, step_count
+
+
 def run_agent(env, config: AgentConfig | None = None) -> AgentState:
     """Run the LLM agent on an ARC-AGI-3 environment."""
     if config is None:
@@ -744,6 +1332,20 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
     state.state_hashes.add(grid_hash(grid))
     bar_tracker.update(grid, 0)
 
+    # Inject prior beliefs from a previous run
+    if config.prior_beliefs:
+        state.memory = config.prior_beliefs
+        print(f"\n  [MULTI-RUN] Injected prior beliefs from previous run:")
+        try:
+            beliefs = json.loads(config.prior_beliefs)
+            if beliefs.get("goal"):
+                print(f"    Goal: {beliefs['goal']}")
+            if beliefs.get("controls"):
+                for k, v in beliefs["controls"].items():
+                    print(f"    {k}: {v}")
+        except (json.JSONDecodeError, TypeError):
+            print(f"    {config.prior_beliefs[:200]}")
+
     if display:
         display.update(grid, "Initial observation")
 
@@ -760,14 +1362,29 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         if feedback:
             state.human_feedback = feedback
 
-    # Run initial analyzer
-    print("\n  [ANALYZER] Running initial perception...")
+    # Phase 1: Systematic exploration (harness-driven, no LLM calls)
+    explore_steps = 0
+    if config.systematic_explore and state.available_actions:
+        grid, explore_steps = run_systematic_exploration(
+            env, state, config, avatar_tracker, bar_tracker, exploration,
+            grid, display,
+            frames_path if config.save_frames else None,
+            saved_frames if config.save_frames else None,
+        )
+        state.frame_analysis = describe_frame(grid)
+
+    # Phase 2: Initial LLM analysis with ALL exploration data
+    print("\n  ANALYZER: Running initial perception (with exploration data)...")
     analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
-    print(f"  [ANALYZER] {analysis[:300]}...")
+    _print_analysis(analysis)
 
     last_expected = "Unknown — first action"
+    remaining_steps = config.max_actions - explore_steps
 
-    for step_num in range(config.max_actions):
+    # Phase 3: LLM-driven execution
+    for step_num in range(remaining_steps):
+        actual_step = explore_steps + step_num + 1  # Total step number
+
         # Run analyzer periodically or on important events
         should_analyze = (
             step_num > 0 and (
@@ -777,11 +1394,11 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             )
         )
         if should_analyze:
-            print(f"\n  [ANALYZER] Re-analyzing (step {step_num + 1})...")
+            print(f"\n  ANALYZER: Re-analyzing (step {actual_step})...")
             analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
-            print(f"  [ANALYZER] {analysis[:200]}...")
+            _print_analysis(analysis)
 
-        # Run actor — chooses action based on validated beliefs
+        # === 1. RUN ACTOR — decide action (don't print yet) ===
         game_action, data, reasoning, parsed = run_actor(
             client, grid, state, config, analysis, avatar_tracker, bar_tracker, exploration
         )
@@ -791,16 +1408,7 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         coords = f" x={data['x']},y={data['y']}" if data else ""
         last_expected = parsed.get("expected_result", "no prediction")
 
-        # Display step
-        sep = "─" * 60
-        print(f"\n{sep}")
-        print(f"  Step {step_num + 1}/{config.max_actions}")
-        print(sep)
-        print(f"  Reasoning: {reasoning}")
-        print(f"  Expected: {last_expected}")
-        print(f"  Action: >>> {label}{coords}")
-
-        # Execute action
+        # === 2. EXECUTE ACTION ===
         obs = env.step(game_action, data=data or {})
 
         if obs is None:
@@ -821,7 +1429,16 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
         # Update trackers
         avatar_tracker.update(action_name, diff_result)
-        bar_tracker.update(grid, step_num + 1)
+        bar_tracker.update(grid, actual_step)
+
+        # Annotate diff with avatar movement info
+        if avatar_tracker.avatar_candidate:
+            ac = avatar_tracker.avatar_candidate["color"]
+            avatar_moved = any(
+                m["color"] == ac for m in diff_result.get("movements", [])
+            )
+            if not avatar_moved and diff_result.get("changed_cells", 0) > 0:
+                state.diff_text += " (NOTE: avatar did NOT move — only non-avatar pixels changed)"
 
         # Update exploration controller
         movements = diff_result.get("movements", [])
@@ -849,64 +1466,154 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
         else:
             state.no_progress_count += 1
 
-        # Print harness info
-        print(f"\n  Diff: {state.diff_text}")
+        # ============================================================
+        # DISPLAY — chronological flow: observe → reflect → update → decide
+        # ============================================================
+        sep = "=" * 70
+
+        print(f"\n{sep}")
+        print(f"  STEP {actual_step}/{config.max_actions}")
+        print(sep)
+
+        # --- OBSERVE: what happened ---
+        print(f"\n  1. OBSERVE (action taken: {label}{coords})")
+        print(f"  | What happened: {state.diff_text}")
         avatar_info = avatar_tracker.get_avatar_info()
         if avatar_info:
-            print(f"  Avatar: {avatar_info}")
+            print(f"  | Avatar: {avatar_info}")
         bar_warn = bar_tracker.get_bar_warnings()
         if bar_warn:
-            print(f"  Bar: {bar_warn}")
-        print(f"  State: {'NEW' if is_novel else 'REPEATED'} | No-progress: {state.no_progress_count}")
+            for line in bar_warn.split("\n"):
+                print(f"  | Bar: {line}")
+        print(f"  | State: {'NEW' if is_novel else 'REPEATED'}  |  Stale: {state.no_progress_count} steps")
 
-        # === REFLECTOR — forced meta-cognition after every action ===
-        print(f"  [REFLECTOR] Validating beliefs...")
+        # --- REFLECT: what the agent thinks about it ---
+        print(f"\n  2. REFLECT")
         reflection = run_reflector(
             client, grid, state, config, analysis, action_name, last_expected,
             avatar_tracker, bar_tracker, exploration,
         )
         reflection_parsed = parse_response(reflection)
 
-        # Print belief reviews
+        # Prediction check
+        pvr = reflection_parsed.get("prediction_vs_reality", "")
+        if pvr:
+            print(f"  | Predicted: {last_expected[:80]}")
+            print(f"  | Reality:   {pvr[:120]}")
+
+        # Causal analysis — the WHY
+        causal = reflection_parsed.get("causal_analysis", "")
+        if causal:
+            print(f"  | WHY: {causal[:200]}")
+        causal_hyps = reflection_parsed.get("causal_hypotheses", [])
+        for ch in causal_hyps[:3]:
+            if isinstance(ch, dict):
+                obs_text = ch.get("observation", "?")[:40]
+                cause_text = ch.get("cause", "?")[:50]
+                conf = ch.get("confidence_pct", "?")
+                print(f"  |   {obs_text} BECAUSE {cause_text} ({conf}%)")
+
+        # What's new / what changed
+        new_disc = reflection_parsed.get("new_discoveries", [])
+        if new_disc:
+            print(f"  | Discoveries:")
+            for d in new_disc[:3]:
+                print(f"  |   + {d[:100]}")
+
+        # --- UPDATE: belief changes ---
         reviews = reflection_parsed.get("belief_reviews", [])
         kept = [r for r in reviews if r.get("verdict") == "KEEP"]
         changed = [r for r in reviews if r.get("verdict") == "CHANGE"]
         dropped = [r for r in reviews if r.get("verdict") == "DROP"]
-        new_disc = reflection_parsed.get("new_discoveries", [])
-        print(f"  [REFLECTOR] {len(kept)} kept, {len(changed)} changed, {len(dropped)} dropped, {len(new_disc)} new")
-        for r in changed:
-            print(f"    ~ CHANGED: {r.get('belief', '?')[:60]} → {r.get('corrected', '?')[:60]}")
-        for r in dropped:
-            print(f"    ✗ DROPPED: {r.get('belief', '?')[:80]} — {r.get('justification', '?')[:60]}")
-        if new_disc:
-            for d in new_disc[:3]:
-                print(f"    ★ NEW: {d[:100]}")
+
+        if changed or dropped or new_disc:
+            print(f"\n  3. UPDATE ({len(kept)} kept, {len(changed)} changed, {len(dropped)} dropped)")
+            for r in changed:
+                print(f"  |   ~ {r.get('belief', '?')[:40]} -> {r.get('corrected', '?')[:50]}")
+            for r in dropped:
+                print(f"  |   x {r.get('belief', '?')[:50]} -- {r.get('justification', '?')[:40]}")
+        else:
+            print(f"\n  3. UPDATE (no changes — {len(kept)} beliefs confirmed)")
+
+        # Goal hypotheses
+        goal_hyps = reflection_parsed.get("goal_hypotheses", [])
+        if goal_hyps:
+            print(f"\n  4. GOALS")
+            for gh in goal_hyps[:5]:
+                if isinstance(gh, dict):
+                    rank = gh.get("rank", "?")
+                    conf = gh.get("confidence_pct", "?")
+                    goal = gh.get("goal", "?")
+                    print(f"  | #{rank} ({conf}%) {goal[:80]}")
+                    ev_for = gh.get("evidence_for", "")
+                    ev_against = gh.get("evidence_against", "")
+                    confirm = gh.get("confirm_test", "")
+                    refute = gh.get("refute_test", "")
+                    if ev_for:
+                        print(f"  |     + {ev_for[:80]}")
+                    if ev_against:
+                        print(f"  |     - {ev_against[:80]}")
+                    if confirm:
+                        print(f"  |     confirm: {confirm[:70]}")
+                    if refute:
+                        print(f"  |     refute:  {refute[:70]}")
+
+        # Unknowns
+        unc_red = reflection_parsed.get("uncertainty_reduction", {})
+        if isinstance(unc_red, dict):
+            unknowns = unc_red.get("top_unknowns", [])
+            if unknowns:
+                print(f"\n  5. UNKNOWNS")
+                for u in unknowns[:3]:
+                    if isinstance(u, dict):
+                        print(f"  | ? {u.get('question', '?')[:60]}")
+                        print(f"  |   experiment: {u.get('experiment', '?')[:60]}")
+            mvi = unc_red.get("most_valuable_info", "")
+            if mvi:
+                print(f"  | >> Most valuable: {mvi[:100]}")
+
+        # Strategy
         strategy = reflection_parsed.get("strategy_check", {})
         if isinstance(strategy, dict):
             prog = strategy.get("making_progress", "?")
             stale = strategy.get("steps_without_progress", "?")
-            unc = strategy.get("biggest_uncertainty", "")
-            print(f"  [STRATEGY] Progress: {prog} | Stale: {stale} steps | Uncertainty: {unc[:100]}")
-            alts = strategy.get("alternative_goals", [])
-            if alts and not prog:
-                for a in alts[:2]:
-                    print(f"    ? ALT GOAL: {a[:100]}")
-        elif isinstance(strategy, str) and strategy:
-            print(f"  [STRATEGY] {strategy[:150]}")
-        # Print current beliefs summary
+            untried = strategy.get("untried_sequences", [])
+            if not prog or stale and int(stale) >= 2 if isinstance(stale, int) else False:
+                print(f"\n  STRATEGY WARNING")
+                print(f"  | Progress: {prog}  |  Stale: {stale} steps")
+                if untried:
+                    print(f"  | Untried: {untried[:3]}")
+
+        # Current beliefs summary
         if state.memory:
             try:
                 beliefs = json.loads(state.memory)
+                print(f"\n  CURRENT BELIEFS")
                 if beliefs.get("goal"):
-                    print(f"  [BELIEFS] Goal: {beliefs['goal']}")
-                if beliefs.get("unknowns"):
-                    print(f"  [BELIEFS] Unknowns: {beliefs['unknowns'][:3]}")
+                    print(f"  | Goal: {beliefs['goal'][:100]}")
+                if beliefs.get("causal_model"):
+                    cm = beliefs["causal_model"]
+                    if isinstance(cm, list):
+                        for c in cm[:3]:
+                            print(f"  | Cause: {c[:100]}")
+                if beliefs.get("failed_approaches"):
+                    fa = beliefs["failed_approaches"]
+                    if isinstance(fa, list) and fa:
+                        print(f"  | Failed: {fa[-1][:100]}")
             except (json.JSONDecodeError, AttributeError):
                 pass
 
-        # Record step
+        # --- DECIDE: what the agent chose to do (shown LAST) ---
+        print(f"\n  6. DECIDE")
+        print(f"  | Reasoning: {reasoning[:150]}")
+        print(f"  | Action:    {label}{coords}")
+        print(f"  | Expected:  {last_expected[:150]}")
+
+        # Record step with position context
+        # "had_effect" = avatar moved (not just bar pixels changing)
+        had_effect = avatar_pos is not None and prev_avatar_pos is not None
         record = StepRecord(
-            action_num=step_num + 1,
+            action_num=actual_step,
             action=action_name,
             x=data.get("x") if data else None,
             y=data.get("y") if data else None,
@@ -914,17 +1621,28 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
             state=obs.state.name if obs.state else "UNKNOWN",
             levels_completed=obs.levels_completed or 0,
             diff_summary=state.diff_text,
+            avatar_pos=prev_avatar_pos,
+            had_effect=had_effect,
         )
         state.steps.append(record)
+
+        # Update contextual action log (position → effect mapping)
+        if action_name not in state.action_context_log:
+            state.action_context_log[action_name] = []
+        state.action_context_log[action_name].append({
+            "pos": prev_avatar_pos,
+            "had_effect": had_effect,
+            "summary": state.diff_text[:60],
+        })
 
         # Update display
         if display:
             status = obs.state.name if obs.state else "?"
-            display.update(grid, f"Step {step_num + 1}: {label}{coords}  [{status}]")
+            display.update(grid, f"Step {actual_step}: {label}{coords}  [{status}]")
 
         if config.save_frames:
             img = grid_to_image(grid, scale=4)
-            img.save(frames_path / f"step_{step_num + 1:03d}_{label.lower()}.png")
+            img.save(frames_path / f"step_{actual_step:03d}_{label.lower()}.png")
             saved_frames.append(img.copy())
 
         if config.step_mode:
@@ -940,11 +1658,11 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
 
         # Check terminal states
         if obs.state == GameState.WIN:
-            print(f"\n  🏆 WIN after {step_num + 1} steps! "
+            print(f"\n  WIN after {actual_step} steps! "
                   f"Levels completed: {obs.levels_completed}")
             break
         elif obs.state == GameState.GAME_OVER:
-            print(f"\n  *** GAME OVER at step {step_num + 1} ***")
+            print(f"\n  *** GAME OVER at step {actual_step} ***")
 
             # Force deep reflection on death
             death_reflection = run_reflector(
@@ -961,15 +1679,16 @@ def run_agent(env, config: AgentConfig | None = None) -> AgentState:
                 state.diff_text = "Level reset after GAME_OVER."
                 state.frame_analysis = describe_frame(grid)
                 state.no_progress_count = 0
-                bar_tracker.update(grid, step_num + 1)
+                bar_tracker.update(grid, actual_step)
                 if hasattr(obs, "available_actions") and obs.available_actions:
                     state.available_actions = list(obs.available_actions)
                 if display:
                     display.update(grid, "GAME OVER — RESET")
 
                 # Re-analyze after death
-                print("  [ANALYZER] Re-analyzing after death...")
+                print("  ANALYZER: Re-analyzing after death...")
                 analysis = run_analyzer(client, grid, state, config, avatar_tracker, bar_tracker, exploration)
+                _print_analysis(analysis)
 
     # Save GIF
     if config.save_frames and len(saved_frames) > 1:

@@ -177,7 +177,7 @@ class BarTracker:
         lines = []
         for bar in self.detected_bars:
             lines.append(
-                f"⚠ RESOURCE BAR at y={bar['y']}: {bar['color_name']} bar shrinking "
+                f"RESOURCE BAR at y={bar['y']}: {bar['color_name']} bar shrinking "
                 f"({bar['initial_length']}→{bar['current_length']}px, lost {bar['decrease']}px). "
                 f"This is a COST/HEALTH indicator, NOT progress! "
                 f"Depleting it is BAD, not a goal."

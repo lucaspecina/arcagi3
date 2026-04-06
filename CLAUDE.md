@@ -34,8 +34,23 @@ potencia GPT-5.4 para resolver entornos interactivos ARC-AGI-3 de forma GENERALI
 via buenas preguntas, memoria/abstracciones, multi-agente (critic, sintesis, debate),
 tools, y multi-run learning. El LLM es el CEREBRO — el harness lo potencia.
 
-**PROHIBIDO**: Codigo game-specific, leer source code de juegos, hardcodear mecanicas,
-reemplazar al LLM con solvers programaticos. Todo debe funcionar en TODOS los juegos.
+**PROHIBIDO** (REGLA DURA — CERO EXCEPCIONES):
+- Codigo game-specific (BFS de un laberinto, Sokoban solver, maze mapper, greedy navigator para un juego)
+- Leer source code de juegos
+- Hardcodear mecanicas de juegos individuales
+- Reemplazar al LLM con solvers programaticos
+- Escribir logica que solo funciona en UN juego
+- Todo debe funcionar en TODOS los 25 juegos identicamente
+- Si la pregunta "funciona esto en todos los juegos?" es NO → NO LO HAGAS
+
+## Modelo y presupuesto
+- **SIEMPRE usar GPT-5.4** — no downgradeamos a modelos mas baratos. NUNCA.
+- **No preocuparse por el budget** — priorizar velocidad de iteracion, no ahorro.
+
+## Juegos de analisis
+- **ls20** (principal) y **g50t** (secundario) — campo de pruebas para iterar
+- Todo el codigo es GENERALIZABLE a los 25 juegos
+- Estos dos juegos son para validar la arquitectura, no para hacer solvers custom
 
 ## Environment setup
 ```bash

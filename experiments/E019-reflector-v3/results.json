@@ -1,0 +1,29 @@
+[
+  {
+    "game_id": "g50t-5849a774",
+    "run_id": 1,
+    "steps": 30,
+    "deaths": 0,
+    "levels_completed": 0,
+    "elapsed": 1471.9,
+    "final_beliefs": "{\n  \"controls\": {\n    \"ACTION1\": \"no visible effect (CONFIRMED)\",\n    \"ACTION2\": \"Causes pixel color change and resource bar shrinkage (CONFIRMED)\",\n    \"ACTION3\": \"moves avatar DOWN unless obstructed or interacts with an object (CONFIRMED)\",\n    \"ACTION4\": \"moves avatar DOWN unless obstructed or interacts with an object (CONFIRMED)\",\n    \"ACTION5\": \"no visible effect, resource bar shrinkage (CONFIRMED)\",\n    \"RESET\": \"moves avatar UP (avg delta: dx=1, dy=-1) (CONFIRMED)\"\n  },\n  \"rules\": [\n    \"Depleting the resource bar is bad (evidence: 1)\"\n  ],\n  \"goal\": \"Interact with the red object (confidence: low, evidence: 0)\",\n  \"objects\": [\n    \"black object, center=(22,10)\",\n    \"red object, center=(30.5,31.8)\",\n    \"light-gray object, center=(31.5,63.0)\",\n    \"blue controlled object, center=(31.5,63.0)\"\n  ],\n  \"dangers\": [\n    \"Depleting the resource bar\"\n  ],\n  \"unknowns\": [\n    \"How to interact with the red object effectively.\"\n  ],\n  \"failed_approaches\": [\n    \"ACTION1 did not move or affect the controlled object.\"\n  ]\n}"
+  },
+  {
+    "game_id": "vc33-9851e02b",
+    "run_id": 1,
+    "steps": 30,
+    "deaths": 0,
+    "levels_completed": 0,
+    "elapsed": 692.4,
+    "final_beliefs": "{\n  \"controls\": {\n    \"ACTION6\": \"moves avatar UP (CONFIRMED)\",\n    \"RESET\": \"restores environment (CONFIRMED)\"\n  },\n  \"rules\": [\n    \"Pixel color changes may indicate cost or health effects (evidence: 3)\"\n  ],\n  \"goal\": \"Explore interaction with blue objects (confidence: low, evidence: 0)\",\n  \"objects\": [\n    \"white object at (26,14)\",\n    \"yellow object at (58,46)\",\n    \"yellow object at (38.5,29.5)\",\n    \"blue objects on the right side\"\n  ],\n  \"dangers\": [\n    \"Pixel color changes indicating cost or health loss\"\n  ],\n  \"unknowns\": [\n    \"Significance of pixel color changes\"\n  ],\n  \"failed_approaches\": [\n    \"ACTION6 did not interact with yellow objects as predicted\"\n  ]\n}"
+  },
+  {
+    "game_id": "m0r0-dadda488",
+    "run_id": 1,
+    "steps": 30,
+    "deaths": 0,
+    "levels_completed": 0,
+    "elapsed": 827.5,
+    "final_beliefs": "{\n  \"controls\": {\n    \"ACTION1\": \"moves avatar UP (CONFIRMED)\",\n    \"ACTION2\": \"moves avatar DOWN (CONFIRMED)\",\n    \"ACTION5\": \"no visible effect (CONFIRMED)\",\n    \"ACTION6\": \"no visible effect (CONFIRMED)\"\n  },\n  \"rules\": [\n    \"Actions may cause pixel changes without color change (confirmed 2 times)\"\n  ],\n  \"goal\": \"Interact with or collect light-blue objects (confidence: medium, evidence: distinct objects near center)\",\n  \"objects\": [\n    \"orange object at center=(49.2,30.4)\",\n    \"yellow object at center=(14.0,29.1)\",\n    \"light-blue object at center=(21.0,51.0)\",\n    \"light-blue object at center=(41.0,51.0)\"\n  ],\n  \"dangers\": [\n    \"Depleting the resource bars is BAD.\"\n  ],\n  \"unknowns\": [\n    \"The purpose of ACTION6\"\n  ],\n  \"failed_approaches\": [\n    \"ACTION3 did not cause expected horizontal movement.\"\n  ]\n}"
+  }
+]

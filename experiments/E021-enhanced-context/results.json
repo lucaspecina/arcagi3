@@ -1,0 +1,173 @@
+[
+  {
+    "game_id": "g50t-5849a774",
+    "run_id": 1,
+    "steps": 30,
+    "deaths": 0,
+    "levels_completed": 0,
+    "elapsed": 853.7,
+    "final_beliefs": "{\n  \"controls\": {\n    \"ACTION1\": \"No visible effect on any object.\",\n    \"ACTION2\": \"Changes color of blue object to light-gray and reduces blue bar.\",\n    \"ACTION3\": \"Moves avatar UP at specific positions.\",\n    \"ACTION4\": \"Moves blue object LEFT, sometimes swapping with another object.\",\n    \"ACTION5\": \"Moves avatar UP (avg delta: dx=-0, dy=-1).\",\n    \"RESET\": \"Restarts the level.\"\n  },\n  \"rules\": [\n    \"ACTION2 changes color of blue object to light-gray and reduces blue bar.\"\n  ],\n  \"goal\": \"Explore different paths to the red object (confidence: low, evidence: none)\",\n  \"objects\": [\n    \"black object at center (19,13)\",\n    \"red object at center (30.5,31.8)\",\n    \"light-gray object at center (62.5,63.0)\",\n    \"other blue objects and light-gray object\"\n  ],\n  \"dangers\": [\n    \"Depleting the blue bar is bad.\"\n  ],\n  \"unknowns\": [\n    \"Exact effects of combining actions\"\n  ],\n  \"failed_approaches\": [\n    \"ACTION1 did not move or affect the blue object as expected.\"\n  ]\n}",
+    "action_context_log": {
+      "ACTION1": [
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        }
+      ],
+      "ACTION2": [
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            16,
+            10
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            16,
+            10
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        }
+      ],
+      "ACTION3": [
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            13,
+            13
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            12,
+            12
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        }
+      ],
+      "ACTION4": [
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            16,
+            10
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            23,
+            12
+          ],
+          "had_effect": true
+        }
+      ],
+      "ACTION5": [
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            18,
+            12
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": [
+            17,
+            8
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        },
+        {
+          "pos": [
+            18,
+            12
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": [
+            17,
+            8
+          ],
+          "had_effect": true
+        },
+        {
+          "pos": null,
+          "had_effect": false
+        }
+      ]
+    }
+  }
+]

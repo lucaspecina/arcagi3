@@ -5,9 +5,9 @@ El LLM es el cerebro. El harness lo potencia con estructura.
 NUNCA codigo game-specific.**
 
 ## NOW
+- [ ] Iterar arquitectura generalizable del harness — testeando en ls20 (principal) y g50t (secundario) → I-003
 - [ ] Implementar multi-run con sintesis de abstracciones (N runs → sintetizar → reintentar) → I-003
 - [ ] Implementar critic agent (cuestiona razonamientos, detecta contradicciones) → I-003
-- [ ] Evaluar en multiples juegos (no solo uno) con N>1 por juego → I-003
 
 ## NEXT
 - [ ] Memoria de abstracciones cross-run (que sobreviva entre intentos)

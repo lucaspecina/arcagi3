@@ -220,11 +220,11 @@ class ExplorationController:
         # Blocked actions here
         blocked = self.get_blocked_actions()
         if blocked:
-            lines.append(f"⛔ BLOCKED here: {', '.join(blocked)} (walls/obstacles)")
+            lines.append(f"BLOCKED here: {', '.join(blocked)} (walls/obstacles)")
 
         # Oscillation warning
         if self.detect_oscillation():
-            lines.append("⚠ OSCILLATION DETECTED! You are going back and forth. CHANGE DIRECTION!")
+            lines.append("OSCILLATION DETECTED! You are going back and forth. CHANGE DIRECTION!")
 
         # Frontier suggestion
         direction = self.suggest_direction()
@@ -236,7 +236,7 @@ class ExplorationController:
             from .grid_utils import COLOR_NAMES
             names = [COLOR_NAMES.get(c, f"color-{c}") for c in self.co_movers]
             lines.append(
-                f"⚠ CO-MOVERS: {', '.join(names)} objects move WITH your avatar. "
+                f"CO-MOVERS: {', '.join(names)} objects move WITH your avatar. "
                 f"They are NOT separate targets!"
             )
 
@@ -247,6 +247,6 @@ class ExplorationController:
                 loss_per_step = (recent[0] - recent[-1]) / len(recent)
                 remaining = recent[-1]
                 steps_left = int(remaining / max(loss_per_step, 0.1))
-                lines.append(f"⚠ HEALTH DECLINING: ~{loss_per_step:.0f}px/step, ~{steps_left} steps left before empty")
+                lines.append(f"HEALTH DECLINING: ~{loss_per_step:.0f}px/step, ~{steps_left} steps left before empty")
 
         return "\n".join(lines)
