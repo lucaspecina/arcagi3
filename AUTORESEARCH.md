@@ -1,6 +1,6 @@
 # Autoresearch
 
-## Status: OFF
+## Status: ON
 
 ## What is this
 When Status is ON, Claude Code operates as an autonomous research agent
@@ -44,8 +44,8 @@ LOOP FOREVER:
 
   3. COMMIT — git add + git commit with descriptive message.
 
-  4. RUN — execute bench (15 min timeout, kill if exceeds):
-     timeout 900 python -m arcagi3.bench \
+  4. RUN — execute bench (30 min timeout, kill if exceeds):
+     timeout 1800 python -m arcagi3.bench \
        --games ls20 --runs 3 --max-actions 30 \
        --model gpt-5.4-mini --judge
      If timeout fires, treat as crash.
@@ -119,7 +119,7 @@ Status values: `baseline`, `keep`, `discard`, `crash`.
 | Max actions per run | 30 | Enough to reach "+" in ls20 |
 | Temperature | 0.7 | Default, good exploration/exploitation balance |
 | Judge model | gpt-5.4-mini | Consistent, fast |
-| Time budget per experiment | 15 min | `timeout 900`, kill and log as crash |
+| Time budget per experiment | 30 min | `timeout 1800`, kill and log as crash |
 | Experiments per session | ~5-8 | Limited by context window |
 
 ---
