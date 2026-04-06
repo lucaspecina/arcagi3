@@ -19,14 +19,11 @@ This file IS the program.
    - `src/arcagi3/agent.py` (prompts, loop logic)
    - `src/arcagi3/bench.py` (bench runner)
    - `src/arcagi3/judge.py` (evaluation)
-3. Read `results.tsv` if it exists (experiment history).
+3. Read `results.tsv` if it exists — get `best_metric` from history.
 4. Create branch: `autoresearch/<topic>-<YYYY-MM-DD>` from current main.
-5. Run a baseline bench to establish current metric:
-   ```
-   python -m arcagi3.bench --games ls20 --runs 3 --max-actions 30 --model gpt-5.4-mini --judge
-   ```
-6. Log baseline in results.tsv.
-7. Confirm with human: "Baseline = X. Starting autoresearch loop. Interrupt me anytime."
+5. **Only if results.tsv does NOT exist**: run a baseline bench and log it.
+   Otherwise, the last best metric from results.tsv IS the baseline.
+6. Confirm with human: "Best metric = X. Starting autoresearch loop. Interrupt me anytime."
 
 ---
 
@@ -47,11 +44,11 @@ LOOP FOREVER:
 
   3. COMMIT — git add + git commit with descriptive message.
 
-  4. RUN — execute bench:
-     PYTHONIOENCODING=utf-8 python -m arcagi3.bench \
+  4. RUN — execute bench (15 min timeout, kill if exceeds):
+     timeout 900 python -m arcagi3.bench \
        --games ls20 --runs 3 --max-actions 30 \
        --model gpt-5.4-mini --judge
-     Pipe output to run.log if needed.
+     If timeout fires, treat as crash.
 
   5. PARSE — extract the COMBINED METRIC from bench output.
 
@@ -122,7 +119,8 @@ Status values: `baseline`, `keep`, `discard`, `crash`.
 | Max actions per run | 30 | Enough to reach "+" in ls20 |
 | Temperature | 0.7 | Default, good exploration/exploitation balance |
 | Judge model | gpt-5.4-mini | Consistent, fast |
-| Time budget per experiment | 15 min | Kill bench if exceeds this |
+| Time budget per experiment | 15 min | `timeout 900`, kill and log as crash |
+| Experiments per session | ~5-8 | Limited by context window |
 
 ---
 
