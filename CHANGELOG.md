@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-06
+- Add LLM Judge Oracle for evaluating agent understanding vs golden thinking (I-003)
+- Add bench runner with chained runs, belief transfer, and parallel games (I-003)
+- Add golden thinking for ls20 (controls, mechanics, milestones, anti-patterns)
+- Benchmark Azure Foundry models: gpt-5.4-mini selected for autoresearch (36s/5 actions)
+- Fix Unicode encoding crash on Windows (cp1252 chars in agent.py)
+- Add --judge and --judge-model flags to run.py CLI
+- Conda env setup: arcagi3 with Python 3.12
+
 ## 2026-04-01
 - Upgrade estructura a workflow estandar: issue tracking, experiments, autoresearch (I-002)
 - Reescrito CLAUDE.md, TODO.md, CURRENT_STATE.md alineados con dev-workflow skills

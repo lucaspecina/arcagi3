@@ -12,7 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run ARC-AGI-3 LLM agent")
     parser.add_argument("--game", default="ls20", help="Game ID to play (default: ls20)")
     parser.add_argument("--model", default="", help="LLM model name (default: from env)")
-    parser.add_argument("--max-actions", type=int, default=80, help="Max actions per game")
+    parser.add_argument("--max-actions", type=int, default=80, help="Max actions per game (e.g. 15 for quick test)")
     parser.add_argument("--no-vision", action="store_true", help="Disable vision, use text only")
     parser.add_argument("--render", default="terminal", help="Render mode: terminal, human, or none")
     parser.add_argument("--window", action="store_true", help="Render in a separate window (shortcut for --render human)")
@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--raw", action="store_true", help="Show raw prompt sent to model before first action")
     parser.add_argument("--save-frames", action="store_true", help="Save each frame as PNG + final GIF replay")
     parser.add_argument("--frames-dir", default="frames", help="Directory to save frames (default: frames/)")
+    parser.add_argument("--judge", action="store_true", help="Run LLM judge after game to evaluate understanding")
+    parser.add_argument("--judge-model", default="gpt-5.4", help="Model for the judge (default: gpt-5.4)")
     args = parser.parse_args()
 
     import arc_agi
@@ -88,6 +90,19 @@ def main():
     scorecard = arc.get_scorecard()
     if scorecard:
         print(f"Score: {scorecard.score}")
+
+    # Run LLM judge if requested
+    if args.judge:
+        from .judge import print_judge_result, run_judge
+
+        print("\nRunning LLM judge evaluation...")
+        judge_result = run_judge(
+            game_id=args.game,
+            beliefs_json=state.memory or "{}",
+            steps=state.steps,
+            model=args.judge_model,
+        )
+        print_judge_result(judge_result)
 
     return state
 

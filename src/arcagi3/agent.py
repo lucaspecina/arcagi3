@@ -1045,7 +1045,7 @@ def run_systematic_exploration(
 
     Returns: (current_grid, steps_used)
     """
-    print("\n  ═══ PHASE 1: SYSTEMATIC EXPLORATION (harness-driven, no LLM) ═══")
+    print("\n  === PHASE 1: SYSTEMATIC EXPLORATION (harness-driven, no LLM) ===")
 
     actions_to_test = []
     for aid in state.available_actions:
@@ -1274,7 +1274,7 @@ def run_systematic_exploration(
                 break
 
     # Build exploration summary using our own results (not avatar_tracker)
-    print(f"\n  ═══ EXPLORATION COMPLETE ({step_count} steps used) ═══")
+    print(f"\n  === EXPLORATION COMPLETE ({step_count} steps used) ===")
     print("  Action → Effect (from exploration):")
     for action_name in actions_to_test:
         r = explore_results.get(action_name, {})

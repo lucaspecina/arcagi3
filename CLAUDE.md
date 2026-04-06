@@ -44,7 +44,9 @@ tools, y multi-run learning. El LLM es el CEREBRO — el harness lo potencia.
 - Si la pregunta "funciona esto en todos los juegos?" es NO → NO LO HAGAS
 
 ## Modelo y presupuesto
-- **SIEMPRE usar GPT-5.4** — no downgradeamos a modelos mas baratos. NUNCA.
+- **Desarrollo/runs serios**: GPT-5.4 — el mejor modelo, priorizar calidad.
+- **Autoresearch (iteracion rapida)**: gpt-5.4-mini — 5x mas rapido, buena calidad.
+- **Judge (evaluacion)**: gpt-5.4-mini o gpt-5.4 — low temp, consistente.
 - **No preocuparse por el budget** — priorizar velocidad de iteracion, no ahorro.
 
 ## Juegos de analisis
@@ -70,7 +72,8 @@ pip install -e ".[dev]"    # instalar proyecto + deps de desarrollo
 - **Azure AI Foundry**: `OpenAI(base_url=AZURE_FOUNDRY_BASE_URL, api_key=AZURE_INFERENCE_CREDENTIAL)`
 - **Budget**: $70 USD total for gpt-5.4. Check with `bash scripts/check_budget.sh`
 - **Pricing**: Input ~$3/1M, Output ~$12/1M (output 4x more expensive!)
-- **Models**: gpt-5.4, gpt-5.4-pro, gpt-5.3-chat, gpt-5.2-chat, gpt-5.2-codex, claude-opus-4-6, claude-sonnet-4-6
+- **Models**: gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-5.4-pro, gpt-5.3-chat, gpt-5.2-chat, gpt-5.2-codex, claude-opus-4-6, claude-sonnet-4-6, grok-4-1-fast-reasoning, Kimi-K2.5, DeepSeek-V3.2
+- **Autoresearch model**: gpt-5.4-mini (36s/5 actions, vision, temp variable)
 - Env vars: `AZURE_INFERENCE_CREDENTIAL`, `AZURE_FOUNDRY_BASE_URL`, `AZURE_MODEL`
 
 ## Project structure
@@ -88,8 +91,11 @@ research/            # Investigacion
   notes/             # Exploraciones y dumps pesados
   synthesis/         # Conclusiones consolidadas
   archive/           # Docs superados
+golden/              # Golden thinking per game (for LLM judge)
 src/arcagi3/         # Codigo fuente
   agent.py           # Agente LLM (Azure Foundry)
+  bench.py           # Bench runner — chained runs + parallel games + judge
+  judge.py           # LLM Judge Oracle — evaluates understanding vs golden
   grid_utils.py      # Conversiones grid->image/text
   run.py             # CLI entry point
 .claude/skills/      # Skills del proyecto (/test, /status, /review)
@@ -108,7 +114,13 @@ pyproject.toml       # Dependencias y config
 # Run agent
 python -m arcagi3.run --game ls20
 python -m arcagi3.run --game ls20 --no-vision
+python -m arcagi3.run --game ls20 --step --window      # interactive + visual
+python -m arcagi3.run --game ls20 --judge               # with LLM judge eval
 python -m arcagi3.run --list-games
+
+# Bench (chained runs + judge)
+python -m arcagi3.bench --games ls20 --runs 3 --max-actions 30 --judge --verbose
+python -m arcagi3.bench --games ls20,g50t --runs 3 --judge  # parallel games
 
 # Tests
 pytest
@@ -143,6 +155,11 @@ ruff format .
 
 ## Autoresearch
 - Config en AUTORESEARCH.md (ON/OFF + config del run)
+- **Model**: gpt-5.4-mini (rapido, buena calidad)
+- **Eval**: 2 juegos (ls20, g50t) en paralelo, cadena de 3 runs con belief transfer
+- **Metric**: scorecard > 0 → score real. Else → LLM judge score (golden/)
+- **Loop**: edit → commit → run cadena → judge → keep/discard → repeat
+- **Golden thinking**: `golden/<game_id>.md` — ground truth para el judge
 - Branch: `autoresearch/<topic>-<date>` desde base explicita
 - Commits + pushes en branch de autoresearch
 - Status header en issues = memoria persistente
