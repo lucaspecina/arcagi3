@@ -425,7 +425,7 @@ def build_action_context_summary(state: AgentState) -> str:
             examples = worked[-2:]  # Last 2 successes
             wheres = [f"at ({e['pos'][0]},{e['pos'][1]}): {e['summary'][:40]}" for e in examples if e.get("pos")]
             if wheres:
-                line += f" — " + "; ".join(wheres)
+                line += f" -- " + "; ".join(wheres)
         if failed:
             fail_pos = [f"({e['pos'][0]},{e['pos'][1]})" for e in failed[-2:] if e.get("pos")]
             if fail_pos:
@@ -582,9 +582,9 @@ def run_analyzer(
         response = client.chat.completions.create(
             model=config.model,
             messages=messages,
-            temperature=0.3,  # Lower temp for perception accuracy
+            temperature=config.temperature,
             max_completion_tokens=3000,
-            timeout=180,
+            timeout=120,
         )
         analysis = response.choices[0].message.content or ""
     except Exception as e:
@@ -610,7 +610,7 @@ def _enumerate_beliefs(memory_json: str) -> str:
     controls = beliefs.get("controls", {})
     if isinstance(controls, dict):
         for action, effect in controls.items():
-            items.append(f"[{idx}] CONTROL: {action} → {effect}")
+            items.append(f"[{idx}] CONTROL: {action} -> {effect}")
             idx += 1
 
     # Rules
@@ -702,9 +702,9 @@ def run_reflector(
         response = client.chat.completions.create(
             model=config.model,
             messages=messages,
-            temperature=0.3,
+            temperature=config.temperature,
             max_completion_tokens=3000,
-            timeout=180,
+            timeout=120,
         )
         reflection = response.choices[0].message.content or ""
     except Exception as e:
@@ -1096,7 +1096,7 @@ def run_systematic_exploration(
             # Swap detected — report the first swap
             s = swaps[0]
             effect_desc = (
-                f"SWAP: {s['color_a_name']} at ({s['pos_a_x']},{s['pos_a_y']}) ↔ "
+                f"SWAP: {s['color_a_name']} at ({s['pos_a_x']},{s['pos_a_y']}) <-> "
                 f"{s['color_b_name']} at ({s['pos_b_x']},{s['pos_b_y']})"
             )
             # Compute direction from the first object's movement
@@ -1111,7 +1111,7 @@ def run_systematic_exploration(
                         direction = f"dx={dx},dy={dy}"
                     moved_from = (m["from_x"], m["from_y"])
                     moved_to = (m["to_x"], m["to_y"])
-                    effect_desc = f"SWAP {direction}: object moved ({m['from_x']},{m['from_y']})→({m['to_x']},{m['to_y']})"
+                    effect_desc = f"SWAP {direction}: object moved ({m['from_x']},{m['from_y']})->({m['to_x']},{m['to_y']})"
                     break
             had_movement = True
         elif movements:
@@ -1126,7 +1126,7 @@ def run_systematic_exploration(
                 direction = f"dx={dx},dy={dy}"
             moved_from = (m["from_x"], m["from_y"])
             moved_to = (m["to_x"], m["to_y"])
-            effect_desc = f"{m['color_name']} moved {direction} ({m['from_x']},{m['from_y']})→({m['to_x']},{m['to_y']})"
+            effect_desc = f"{m['color_name']} moved {direction} ({m['from_x']},{m['from_y']})->({m['to_x']},{m['to_y']})"
         elif n_changed > 0 and n_changed <= 5:
             effect_desc = f"{n_changed} pixels changed (bar/minor)"
 
@@ -1162,7 +1162,7 @@ def run_systematic_exploration(
         h = grid_hash(grid)
         state.state_hashes.add(h)
 
-        print(f"    → {action_name}: {effect_desc}")
+        print(f"    > {action_name}: {effect_desc}")
 
         if config.save_frames and frames_path:
             img = grid_to_image(grid, scale=4)
@@ -1265,7 +1265,7 @@ def run_systematic_exploration(
             )
             state.steps.append(record)
             state.state_hashes.add(grid_hash(grid))
-            print(f"    → {action_name}: {effect_desc}")
+            print(f"    > {action_name}: {effect_desc}")
 
             if obs.state == GameState.GAME_OVER:
                 obs = env.reset()
@@ -1275,13 +1275,13 @@ def run_systematic_exploration(
 
     # Build exploration summary using our own results (not avatar_tracker)
     print(f"\n  === EXPLORATION COMPLETE ({step_count} steps used) ===")
-    print("  Action → Effect (from exploration):")
+    print("  Action -> Effect (from exploration):")
     for action_name in actions_to_test:
         r = explore_results.get(action_name, {})
         effect = r.get("effect_desc", "not tested")
         direction = r.get("direction")
         if direction:
-            print(f"    {action_name}: {direction} — {effect}")
+            print(f"    {action_name}: {direction} -- {effect}")
         else:
             print(f"    {action_name}: {effect}")
     print("    RESET: Restarts the level (harness fact)")

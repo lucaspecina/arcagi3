@@ -1,6 +1,6 @@
 # Autoresearch
 
-## Status: ON
+## Status: OFF
 
 ## What is this
 When Status is ON, Claude Code operates as an autonomous research agent

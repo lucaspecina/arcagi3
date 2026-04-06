@@ -273,7 +273,7 @@ def compute_diff(prev: np.ndarray, curr: np.ndarray) -> dict:
     swap_colors = set()
     for s in swaps:
         desc_parts.append(
-            f"SWAP: {s['color_a_name']} at ({s['pos_a_x']},{s['pos_a_y']}) ↔ "
+            f"SWAP: {s['color_a_name']} at ({s['pos_a_x']},{s['pos_a_y']}) <-> "
             f"{s['color_b_name']} at ({s['pos_b_x']},{s['pos_b_y']}) exchanged positions."
         )
         swap_colors.add(s["color_a"])

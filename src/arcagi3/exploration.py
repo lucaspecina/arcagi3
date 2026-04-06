@@ -229,7 +229,7 @@ class ExplorationController:
         # Frontier suggestion
         direction = self.suggest_direction()
         if direction:
-            lines.append(f"→ SUGGESTED: explore {direction} (nearest unexplored area)")
+            lines.append(f"-> SUGGESTED: explore {direction} (nearest unexplored area)")
 
         # Co-movers warning
         if self.co_movers:
