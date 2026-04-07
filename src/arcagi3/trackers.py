@@ -138,36 +138,79 @@ class BarTracker:
         self._detect_monotonic()
 
     def _detect_monotonic(self) -> None:
-        """Detect bars that are shrinking monotonically (= resource bars)."""
+        """Detect bars that are shrinking monotonically (= resource bars).
+
+        Only considers bars near the top or bottom edges of the grid (within
+        10 pixels), where real HUD elements live. Bars in the interior of the
+        grid are almost always maze walls or environmental clutter, not
+        resource indicators. Then groups vertically-adjacent rows of the same
+        color into a single bar region so a 5-pixel-thick wall does not get
+        reported five times.
+        """
         if len(self.bar_history) < 3:
             return
 
-        # Group bars by approximate y-position and color
+        # Determine grid height from latest entry's bars (if any)
+        grid_h = 0
+        for entry in self.bar_history:
+            for bar in entry["bars"]:
+                if bar["y"] + 1 > grid_h:
+                    grid_h = bar["y"] + 1
+        if grid_h == 0:
+            return
+        edge_top = 10
+        edge_bottom = grid_h - 10
+
+        # Group bars by approximate y-position and color, EDGE BARS ONLY
         bar_series: dict[tuple[int, int], list[int]] = {}
         for entry in self.bar_history:
             for bar in entry["bars"]:
+                if bar["y"] >= edge_top and bar["y"] < edge_bottom:
+                    continue  # Skip interior bars (maze walls, not HUD)
                 key = (bar["y"], bar["color"])
                 if key not in bar_series:
                     bar_series[key] = []
                 bar_series[key].append(bar["length"])
 
-        self.detected_bars = []
+        # Find shrinking series
+        raw_detected = []
         for (y, color), lengths in bar_series.items():
             if len(lengths) >= 3:
-                # Check if monotonically decreasing
                 is_decreasing = all(a >= b for a, b in zip(lengths, lengths[1:]))
                 total_decrease = lengths[0] - lengths[-1]
-
                 if is_decreasing and total_decrease > 0:
-                    self.detected_bars.append({
+                    raw_detected.append({
                         "y": y,
                         "color": color,
-                        "color_name": COLOR_NAMES.get(color, f"color-{color}"),
                         "initial_length": lengths[0],
                         "current_length": lengths[-1],
                         "decrease": total_decrease,
-                        "type": "RESOURCE_COST",
                     })
+
+        # Deduplicate vertically-adjacent rows of the same color: a bar that
+        # is N pixels thick produces N detections at consecutive y values.
+        # Group them and keep one representative entry per group.
+        raw_detected.sort(key=lambda b: (b["color"], b["y"]))
+        groups: list[list[dict]] = []
+        for bar in raw_detected:
+            if groups and groups[-1][-1]["color"] == bar["color"] and bar["y"] - groups[-1][-1]["y"] <= 1:
+                groups[-1].append(bar)
+            else:
+                groups.append([bar])
+
+        self.detected_bars = []
+        for group in groups:
+            rep = max(group, key=lambda b: b["decrease"])
+            self.detected_bars.append({
+                "y": rep["y"],
+                "color": rep["color"],
+                "color_name": COLOR_NAMES.get(rep["color"], f"color-{rep['color']}"),
+                "initial_length": rep["initial_length"],
+                "current_length": rep["current_length"],
+                "decrease": rep["decrease"],
+                "thickness": len(group),
+                "type": "RESOURCE_COST",
+            })
 
     def get_bar_warnings(self) -> str | None:
         """Return warnings about detected resource bars."""
