@@ -51,10 +51,12 @@ LOOP FOREVER:
 
   3. COMMIT — git add + git commit with descriptive message.
 
-  4. RUN — execute bench (30 min timeout, kill if exceeds):
-     timeout 1800 python -m arcagi3.bench \
+  4. RUN — execute bench (60 min timeout, kill if exceeds):
+     timeout 3600 python -u -m arcagi3.bench \
        --games ls20 --runs 3 --max-actions 30 \
        --model gpt-5.4-mini --judge
+     A 3-run chain takes ~38-42 min wall time. Use 30 min timeout = killed
+     mid chain 3. The -u flag forces unbuffered stdout for live log tails.
      If timeout fires, treat as crash.
 
   5. PARSE — extract the COMBINED METRIC from bench output.
@@ -126,11 +128,12 @@ Status values: `baseline`, `keep`, `discard`, `crash`.
 | Max actions per run | 30 | Enough to reach "+" in ls20 |
 | Temperature | 0.7 | Default, good exploration/exploitation balance |
 | Judge model | gpt-5.4-mini | Consistent, fast |
-| Time budget per experiment | 40 min | `timeout 2400`, kill and log as crash |
+| Time budget per experiment | 60 min | `timeout 3600`, kill and log as crash |
 | Experiments per session | ~5-8 | Limited by context window |
 
 **Wall time reference**: baseline bench (3 runs × 30 actions + judge) takes
-~35 min on gpt-5.4-mini. Budget accordingly.
+~38-42 min on gpt-5.4-mini (chain1 ~13 min, chain2 ~14-15 min, chain3 ~13-14 min,
+judge ~30s). Budget 60 min hard timeout. The 30-min default will kill chain 3.
 
 ---
 
