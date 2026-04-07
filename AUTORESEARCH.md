@@ -1,6 +1,13 @@
 # Autoresearch
 
-## Status: OFF
+## Status: ON (single-brain mode, 2026-04-06 night session)
+
+**Mode**: Single-brain — Claude Code (this chat) acts as the sole research agent.
+NO worktrees, NO multi-worker. Benches run in background (`run_in_background=true`)
+for parallelism of evaluation only. Multi-worker design lives in I-004 for later.
+
+**Scope**: ls20 only, gpt-5.4-mini, baseline = 30.0 (commit 5c0750c).
+Cap: 4-6 iterations tonight. Stop on 5 consecutive discards or human interrupt.
 
 ## What is this
 When Status is ON, Claude Code operates as an autonomous research agent
@@ -119,8 +126,42 @@ Status values: `baseline`, `keep`, `discard`, `crash`.
 | Max actions per run | 30 | Enough to reach "+" in ls20 |
 | Temperature | 0.7 | Default, good exploration/exploitation balance |
 | Judge model | gpt-5.4-mini | Consistent, fast |
-| Time budget per experiment | 30 min | `timeout 1800`, kill and log as crash |
+| Time budget per experiment | 40 min | `timeout 2400`, kill and log as crash |
 | Experiments per session | ~5-8 | Limited by context window |
+
+**Wall time reference**: baseline bench (3 runs × 30 actions + judge) takes
+~35 min on gpt-5.4-mini. Budget accordingly.
+
+---
+
+## Known gotchas (MUST READ before editing)
+
+These are lessons from past broken runs. Ignoring them wastes hours.
+
+1. **max_completion_tokens must be ≥ 8000 for reasoning models.**
+   `gpt-5.4-mini` consumes internal reasoning tokens that count against
+   the limit but don't appear in `message.content`. With 3000 tokens,
+   the reflector returned empty content (finish_reason=length, len=0)
+   starting at step 6 and beliefs froze forever. Current analyzer and
+   reflector calls are set to 8000. If you lower this, verify you still
+   get `finish_reason=stop` at every step.
+
+2. **Always check finish_reason on LLM responses.** agent.py now warns
+   when finish_reason != "stop" and when parse_response fails to find
+   `updated_beliefs`. Do not silence these warnings — they catch bugs.
+
+3. **Windows stdout is cp1252.** LLMs occasionally emit characters
+   outside cp1252 (`≈`, `✓`, curly quotes) and crash print(). run.py
+   and bench.py reconfigure stdout/stderr to utf-8 with errors='replace'
+   at startup. If you add a new entry point, do the same.
+
+4. **Never run benches in parallel.** The ARC-AGI-3 API + Azure Foundry
+   endpoint rate-limit under concurrent load and drop connections.
+   Tournament-style experiments must run sequentially (`--no-parallel`
+   for multi-game). One bench at a time.
+
+5. **results.tsv is gitignored.** It lives only in your working copy.
+   If you delete it or switch branches carelessly you lose history.
 
 ---
 
