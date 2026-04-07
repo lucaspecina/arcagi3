@@ -22,6 +22,7 @@
 | `notes/arc-agi-2-loading.md` | Como cargar datasets ARC-AGI-1/2 en Python (arckit, DIY) |
 | `notes/arc-agi-dataset-loading.md` | Detalles adicionales de carga de datasets |
 | `notes/sota-abstractions-tools-agents.md` | SOTA: abstracciones, tool creation, world models, memory, competition approaches (I-003) |
+| `notes/autoresearch-night-2026-04-06.md` | Post-mortem de sesión nocturna: 5 iters, 0 mejoras, prompt-tweak loop. Ataques estructurales no intentados. (I-003) |
 
 ## Synthesis index
 | File | Contenido |

@@ -179,5 +179,63 @@ subir leaderboard rápido."
 **Decision:** Repensar el approach. Evaluar pivot a non-LLM first con LLM como
 helper. Definir MVP minimo y eval harness antes de features avanzados.
 
+### 2026-04-06 noche · AUTORESEARCH session — prompt-tweak loop, sin breakthrough
+
+**Setup:** Single-brain mode (Claude Code orquestando, benches en background
+paralelo). ls20 únicamente, gpt-5.4-mini. Cap de 4-6 iteraciones.
+
+**Baseline real medido:** mean=21.25 (n=4), std≈6. El 30/100 inicial era
+suerte. La señal por debajo de ~10 puntos es ruido.
+
+**5 iteraciones probadas:**
+
+| iter | commit | qué cambió | resultado | veredicto |
+|---|---|---|---|---|
+| 1 | c6334bf | Reflector STEP 1: forzar full-grid scan | mean=20 (n=2) | noise, marginal |
+| 2 | e134f73 | Analyzer: regla "INTERACT BEFORE NAVIGATE" | mean=25 (n=3) | weak keep, +3.75 (~0.6 std), judge highlight semantically alineado ("white + is interactive") |
+| 3 | cd2a732 | Actor: priorizar tocar objetos distintivos no testeados | mean=12.5 (n=2) | DISCARD, -12 vs iter2. El actor abandonó exploración local útil |
+| 4 | 73bee3b | Reflector STEP 1.5: SURPRISE DETECTION (cambios distantes como top causal) | mean=20 (n=2) | DISCARD, no mejora |
+| 5 | 8abef4f | BarTracker: solo bars cerca de edges + dedupe filas adyacentes | mean=25 (n=2) | bug fix válido pero no movió la métrica |
+
+**Lo único realmente útil que se descubrió:**
+1. **Bug del shell timeout 1800.** Un bench de 3 chains tarda 38-42 min, no
+   30. El timeout mataba python silenciosamente en chain 3 step 7-9. Costó
+   ~1.5 hs de debugging. Fix en 6fd18fd: `timeout 3600 python -u`.
+2. **Bug del BarTracker.** Reportaba 5 "RESOURCE BAR" falsas por step
+   (paredes del laberinto interior). 7 warnings/step → 1. Fix en 8abef4f.
+3. **Variance del baseline correctamente medida.** Antes solo había una
+   muestra (30, lucky run); ahora sabemos que es 21.25 ± 6.
+
+**Lo que NO se intentó (y debería haberse intentado):**
+- Cambios estructurales al loop (multi-hipótesis, critic, debate, replay)
+- Belief schema redesign (sigue siendo dict plano de strings)
+- Tool calling
+- Multi-modelo (¿el techo es el mini o el harness?)
+- Self-consistency / muestreo del actor con vote
+- Region-based observation (segmentar la grilla en zonas semánticas)
+
+**Patrón del fracaso:** prompt-tweak loop. 4 de 5 iteraciones fueron
+"agreguemos un párrafo a este system prompt". Esto se siente como
+progreso porque hay commits y benches corriendo, pero el espacio de
+búsqueda "adjetivo en un system prompt" es enorme, el ruido es alto y
+los modelos mini suelen ignorar texto agregado. Termina siendo A/B
+testing de inglés.
+
+**Findings sobre dónde está el cuello de botella:**
+- Cambios al ANALYZER produjeron la única mejora marginal (iter2)
+- Cambios al ACTOR hicieron daño (iter3)
+- Cambios al REFLECTOR fueron neutros (iter1, iter4)
+- Hipótesis: el cuello de botella está en *qué percibe* el agente, no
+  en *cómo decide*. El próximo ataque debería atacar la perception
+  layer estructuralmente, no más prompts.
+
+**Anti-patterns documentados** en `AUTORESEARCH.md` para que el próximo
+autoresearch no caiga en lo mismo. Análisis profundo en
+`research/notes/autoresearch-night-2026-04-06.md`.
+
+**Estado del repo:** main = 8abef4f. iter2 (e134f73) y bug fixes
+(6fd18fd, 8abef4f) en main. Iter 3 y 4 revertidos. AUTORESEARCH.md
+status = OFF.
+
 ## Conclusion
 <!-- Se llena al cerrar el issue -->

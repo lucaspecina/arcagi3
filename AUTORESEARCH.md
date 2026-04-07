@@ -1,13 +1,15 @@
 # Autoresearch
 
-## Status: ON (single-brain mode, 2026-04-06 night session)
+## Status: OFF (paused 2026-04-07 morning)
 
-**Mode**: Single-brain — Claude Code (this chat) acts as the sole research agent.
-NO worktrees, NO multi-worker. Benches run in background (`run_in_background=true`)
-for parallelism of evaluation only. Multi-worker design lives in I-004 for later.
+**Last session:** 2026-04-06 night, single-brain mode. 5 iterations,
+~8 hours of compute, 0 real improvements. See "Anti-patterns from past
+sessions" below — the session got stuck in a prompt-tweak loop and
+never tried a structural change. Read those before turning Status back ON.
 
-**Scope**: ls20 only, gpt-5.4-mini, baseline = 30.0 (commit 5c0750c).
-Cap: 4-6 iterations tonight. Stop on 5 consecutive discards or human interrupt.
+**Verified baseline:** mean=21.25 (n=4) on ls20, gpt-5.4-mini,
+30 actions × 3-run chain + judge. Iter 2 (e134f73, ANALYZER INTERACT
+BEFORE NAVIGATE) is in main with weak +3.75 (n=3), borderline-significant.
 
 ## What is this
 When Status is ON, Claude Code operates as an autonomous research agent
@@ -16,6 +18,98 @@ normal development mode — human drives everything.
 
 **Inspired by karpathy/autoresearch.** The LLM agent IS the orchestrator.
 This file IS the program.
+
+---
+
+## READ FIRST — Anti-patterns from past sessions
+
+Each session that wastes a night gets a row here. Read before you start.
+
+### 1. The prompt-tweak loop trap (2026-04-06 night)
+**Symptom:** 5 iterations in a row, all of them are "add another paragraph
+to ANALYZER/REFLECTOR/ACTOR prompt", net improvement ~0.
+
+**Cause:** It feels like progress because you're committing and benching
+every ~40 min. But the search space "adjective in a system prompt" is huge,
+the noise is high (~6 std on a 100-point scale), and mini models often
+ignore added text. You end up A/B testing English wording.
+
+**Rule:** If your last 3 iterations were *all* prompt edits, your 4th
+iteration MUST be something structurally different — see "Architectural
+moves to consider" below. No exceptions, even if a prompt edit "feels
+clearly better".
+
+### 2. Single-sample interpretation (2026-04-06)
+**Symptom:** Iter 1 sample = 25, baseline single sample = 30. "Iter 1 hurt!"
+Then variance run gives baseline = 15, iter 1 replica = 15. Both are noise.
+
+**Cause:** Judge std on ls20 with gpt-5.4-mini is ~6 points. n=1 tells you
+nothing. n=2 barely separates +12. n=3 is the minimum to claim anything.
+
+**Rule:** Every variance baseline gets ≥3 samples. Every iter result that
+crosses a decision threshold gets ≥2 samples. If your decision changes
+between sample 1 and sample 2, you don't have signal — wait for sample 3.
+
+### 3. Silent timeout deaths (2026-04-06)
+**Symptom:** Bench logs go stale at chain 3 step 7-9. No error, no traceback.
+Looks like the python "froze". Spent ~1.5 hours debugging.
+
+**Cause:** Shell `timeout 1800` (30 min) sends SIGTERM at 30 min, but a
+3-run chain takes 38-42 min. Python dies mid-write to stdout, log just
+stops.
+
+**Rule:** Use `timeout 3600 python -u` always (60 min hard cap, unbuffered
+stdout). When a log goes stale, FIRST check `tasklist | grep python.exe`
+and the file mtime — don't grep "Done in" and assume the bench is alive.
+
+### 4. Trust tracker output without inspecting it (2026-04-06)
+**Symptom:** BarTracker reported 5 phantom "RESOURCE BAR" warnings every
+step (interior maze walls misclassified as bars). Polluted context for
+every run, every session, for months.
+
+**Rule:** Before tweaking prompts, read one full run log end to end and
+ask: "is the harness actually feeding the LLM clean data?" If 50% of
+the tracker output is noise, fix that first — it's free signal.
+
+---
+
+## Architectural moves to consider BEFORE another prompt-tweak iter
+
+These are NOT prompt edits. They are structurally different attacks on
+the meta-cognition harness. Work through this list before reverting to
+prompt edits.
+
+- **Multi-hypothesis parallel reasoning.** Instead of a single belief
+  state per run, maintain N=3 parallel "lines of play" (different goal
+  hypotheses) for the first M steps. Each hypothesis picks its own
+  actions. Then a critic step compares evidence and votes on which
+  hypothesis to commit to.
+- **Critic / debate module.** Add a third LLM call between reflector and
+  actor whose only job is to challenge the reflector: "your top hypothesis
+  is X — what is the strongest evidence AGAINST X right now?" Forces
+  refutation, not just confirmation.
+- **Replay learning.** After a chain finishes, run a "post-mortem" LLM
+  call over the full action log + diffs and extract structured lessons
+  ("when you saw Y you should have done Z"). Feed those into the next
+  chain's prior.
+- **Tool calling.** Give the LLM real tools: "compare frame A and frame B",
+  "highlight pixels of color C", "list all isolated objects of size <10".
+  Currently the LLM has to derive everything from raw text dumps.
+- **Region-based observation.** Instead of dumping pixel diffs, segment
+  the grid into semantic regions (HUD top, HUD bottom, playable area,
+  corners) and report changes per region with structured fields.
+- **Belief schema redesign.** The current memory is a flat dict of strings.
+  Try a structured belief graph: nodes = entities, edges = causal
+  hypotheses, with confidence scores and evidence pointers.
+- **Stagnation-driven exploration.** When `no_progress_count >= 3`,
+  switch the actor into a fundamentally different mode (random walk,
+  ACTION6 grid sweep, or LLM-with-temperature=1.5) until something
+  changes.
+- **Self-consistency over a single step.** Sample the actor 3 times with
+  high temperature and majority-vote the action.
+- **Multi-model orchestration.** Use a stronger model (gpt-5.4 not mini)
+  for the analyzer ONCE per run, and the cheap model for everything else.
+  Tests whether the bottleneck is perception capacity or harness wiring.
 
 ---
 
@@ -158,12 +252,25 @@ These are lessons from past broken runs. Ignoring them wastes hours.
    and bench.py reconfigure stdout/stderr to utf-8 with errors='replace'
    at startup. If you add a new entry point, do the same.
 
-4. **Never run benches in parallel.** The ARC-AGI-3 API + Azure Foundry
-   endpoint rate-limit under concurrent load and drop connections.
-   Tournament-style experiments must run sequentially (`--no-parallel`
-   for multi-game). One bench at a time.
+4. **Parallel benches DO work, but only up to ~4.** Verified
+   2026-04-06: 2 parallel benches on ls20 with gpt-5.4-mini run reliably
+   without 401s or rate-limit drops. Earlier note about "never parallel"
+   came from a different config and was disproved. Cap is around 4 — do
+   not push it without re-verifying.
 
-5. **results.tsv is gitignored.** It lives only in your working copy.
+5. **Bench wall time is 38-42 min, not 30.** Use `timeout 3600 python -u
+   -m arcagi3.bench …`. The previous default `timeout 1800` killed chain
+   3 silently (process gone, log frozen mid-line, no traceback). When a
+   log goes stale, check `tasklist | grep python.exe` AND the file mtime
+   before assuming the bench is alive.
+
+6. **Verify trackers before tweaking prompts.** The BarTracker shipped
+   with a bug that emitted 5 phantom "RESOURCE BAR" warnings per step
+   (interior maze walls treated as bars). Read one full run log end to
+   end before iterating on prompts — you may discover the LLM was being
+   fed garbage.
+
+7. **results.tsv is gitignored.** It lives only in your working copy.
    If you delete it or switch branches carelessly you lose history.
 
 ---
