@@ -1,0 +1,19 @@
+commit	metric	judge_ls20	judge_g50t	levels	status	description
+5c0750c	30.0	30	-	0	baseline	Initial baseline measurement (single run, optimistic)
+5c0750c	20.0	20	-	0	variance	Variance run 1 of 3 (paralel x4)
+5c0750c	15.0	15	-	0	variance	Variance run 2 of 3 (paralel x4)
+5c0750c	20.0	20	-	0	variance	Variance run 3 of 3 (paralel x4)
+c6334bf	25.0	25	-	0	noisy	Reflector STEP 1 sample 1 (was tentative keep)
+c6334bf	15.0	15	-	0	noisy	Reflector STEP 1 sample 2 (replica). Mean=20, baseline mean=21.25. NOISE.
+e134f73	30.0	30	-	0	weak_keep	Iter 2 sample 1: ANALYZER INTERACT BEFORE NAVIGATE. Judge: "white + is interactive".
+e134f73	20.0	20	-	0	weak_keep	Iter 2 sample 2 (replica E). Judge: "white plus as interactive object" — semantic match.
+e134f73	25.0	25	-	0	weak_keep	Iter 2 sample 3 (replica F). Mean=25 vs baseline mean=21.25 (+3.75, ~0.6 std). KEEP weak.
+# 4 prior crashes (iter2_replica_a/b/c/d) caused by 30-min shell timeout killing chain 3. Fixed in 6fd18fd.
+cd2a732	10.0	10	-	0	discard	Iter 3 sample A: ACTOR priority untested distinctive objects. Judge: yellow bar but no plus.
+cd2a732	15.0	15	-	0	discard	Iter 3 sample B: same. Judge: white plus marker but limited mechanics.
+cd2a732	-	-	-	-	discard	Iter 3 mean=12.5 vs iter2 mean=25. HURT performance. Reverted to 6fd18fd. Hypothesis: actor became too aggressive about going to distinctive objects, abandoned useful local exploration.
+73bee3b	25.0	25	-	0	discard	Iter 4 sample A: REFLECTOR SURPRISE DETECTION step 1.5.
+73bee3b	15.0	15	-	0	discard	Iter 4 sample B: same.
+73bee3b	-	-	-	-	discard	Iter 4 mean=20 vs iter2 mean=25. No improvement. Reverted to 6fd18fd. Reflector enhancements aren't moving the needle — the agent already enumerates changes; adding more structure doesn't help.
+8abef4f	25.0	25	-	0	bugfix	Iter 5 sample A: BarTracker only near edges + dedupe adjacent rows.
+8abef4f	25.0	25	-	0	bugfix	Iter 5 sample B: same. Mean=25, equals iter2. Tracker fix is a valid bug removal (7 phantom bar warnings/step -> 1) but did not move judge metric. Kept in main.

@@ -2,8 +2,8 @@
 environment_files/
 recordings/
 frames/
-results.tsv
 run.log
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

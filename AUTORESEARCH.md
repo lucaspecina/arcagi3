@@ -270,8 +270,10 @@ These are lessons from past broken runs. Ignoring them wastes hours.
    end before iterating on prompts — you may discover the LLM was being
    fed garbage.
 
-7. **results.tsv is gitignored.** It lives only in your working copy.
-   If you delete it or switch branches carelessly you lose history.
+7. **results.tsv is now tracked in git** (as of 2026-04-07). Commit it
+   alongside any experiment branch so the raw per-sample data survives
+   alongside the narrative in research notes. Bench logs under `logs/`
+   are still gitignored — too big, summarized in post-mortem notes.
 
 ---
 
