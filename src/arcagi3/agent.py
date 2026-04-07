@@ -104,6 +104,21 @@ Where are the interesting objects relative to the player?
 List 3-5 hypotheses for what the objective is. Confidences must sum to ~100%.
 For EACH hypothesis, include a concrete PLAN — a sequence of actions to test it.
 
+CRITICAL RULE — INTERACT BEFORE NAVIGATE:
+You MUST NOT propose a goal of the form "reach the X" or "navigate to the X" \
+unless you have ALREADY interacted with X (stepped on it, touched it) AND \
+observed what happened. Distinctive isolated objects are most often INTERACTIVE \
+elements (switches, items, triggers), NOT navigation destinations.
+
+For any distinctive object you have NOT yet touched, the goal should be \
+"INTERACT with X to learn its function", not "reach X". Only after you \
+interact AND observe no meaningful effect can you re-frame X as a possible \
+navigation target.
+
+This is one of the most common failure modes: assuming a colorful isolated \
+object is a "goal location" when it is actually an "interactive trigger" \
+that unlocks the real objective somewhere else on the grid.
+
 == 5. BIGGEST UNKNOWNS ==
 The 3 things you are MOST uncertain about. For each: what specific
 action or experiment would reduce that uncertainty?
