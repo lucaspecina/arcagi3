@@ -583,7 +583,7 @@ def run_analyzer(
             model=config.model,
             messages=messages,
             temperature=config.temperature,
-            max_completion_tokens=3000,
+            max_completion_tokens=8000,
             timeout=120,
         )
         analysis = response.choices[0].message.content or ""
@@ -703,16 +703,21 @@ def run_reflector(
             model=config.model,
             messages=messages,
             temperature=config.temperature,
-            max_completion_tokens=3000,
+            max_completion_tokens=8000,
             timeout=120,
         )
         reflection = response.choices[0].message.content or ""
+        finish_reason = response.choices[0].finish_reason
+        if finish_reason != "stop":
+            print(f"  [REFLECTOR WARN] finish_reason={finish_reason} len={len(reflection)} chars")
     except Exception as e:
         print(f"  [REFLECTOR] API error: {e}")
         reflection = "{}"
 
     # Extract updated beliefs from reflection
     parsed = parse_response(reflection)
+    if "updated_beliefs" not in parsed:
+        print(f"  [REFLECTOR WARN] No updated_beliefs; parsed keys: {list(parsed.keys())[:5]}")
     if "updated_beliefs" in parsed:
         beliefs = parsed["updated_beliefs"]
         if isinstance(beliefs, dict):

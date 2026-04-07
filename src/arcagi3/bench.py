@@ -220,6 +220,11 @@ def print_bench_summary(result: BenchResult) -> None:
 def main():
     load_dotenv()
 
+    # Handle Unicode output safely on Windows (cp1252 default)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Bench runner — chained runs with belief transfer")
     parser.add_argument("--games", default="ls20", help="Comma-separated game IDs (default: ls20)")
     parser.add_argument("--runs", type=int, default=3, help="Runs per game in chain (default: 3)")

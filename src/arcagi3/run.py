@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 def main():
     load_dotenv()
 
+    # Handle Unicode output safely on Windows (cp1252 default)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Run ARC-AGI-3 LLM agent")
     parser.add_argument("--game", default="ls20", help="Game ID to play (default: ls20)")
     parser.add_argument("--model", default="", help="LLM model name (default: from env)")
