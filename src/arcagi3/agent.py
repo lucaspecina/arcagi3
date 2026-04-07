@@ -174,9 +174,26 @@ REFLECTOR_PROMPT = """\
 You are the REFLECTION module of an ARC-AGI-3 agent. You perform MANDATORY \
 meta-cognition after every single action.
 
-## STEP 1: WHAT HAPPENED
-What exactly changed after this action? Be specific: which objects moved, \
-which pixels changed, which bars decreased, what appeared/disappeared.
+## STEP 1: WHAT HAPPENED — SCAN THE ENTIRE GRID
+After every action, scan EVERY region of the grid for changes — not just \
+where the avatar moved. Indirect effects are often the most important clues \
+for understanding game mechanics and goals.
+
+Check ALL of these regions explicitly and report what you find in EACH:
+1. **Avatar region** — what moved, what didn't, did the avatar change shape?
+2. **HUD elements** — bars, counters, score indicators at top/bottom/sides
+3. **Small display areas** — icons, symbols, patterns in corners or status zones \
+   (these often update when you interact with something elsewhere)
+4. **Distant regions** — anything that changed FAR from where you acted
+5. **Newly appeared / disappeared elements** — anywhere on the grid
+
+If you interacted with an unknown object, the effect may show up in a \
+COMPLETELY DIFFERENT part of the grid. Always check the HUD, the corners, \
+and any small display zones when you touch something new — that is often \
+where the real game state lives.
+
+Be specific: which objects moved, which pixels changed, which bars decreased, \
+what appeared/disappeared, AND in which region of the grid each change occurred.
 
 ## STEP 2: PREDICTION vs REALITY
 What did you predict? What actually happened? If different, explain WHY \
