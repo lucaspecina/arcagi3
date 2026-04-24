@@ -237,5 +237,28 @@ autoresearch no caiga en lo mismo. Análisis profundo en
 (6fd18fd, 8abef4f) en main. Iter 3 y 4 revertidos. AUTORESEARCH.md
 status = OFF.
 
+### 2026-04-24 · PLAN — Belief state estructurado (BLF-adapt)
+
+**Source:** Paper de Kevin Murphy "Agentic Forecasting using Sequential
+Bayesian Updating of Linguistic Beliefs" (arxiv 2604.18576, abril 2026).
+
+**Ataque:** Reemplazar el dict plano de beliefs por un schema
+estructurado con `goal_hypotheses` (evidence_for/against citando step,
+status active/refuted/confirmed, next_test) y `belief_update_reasoning`
+mandatory cada step. Plan completo en
+`research/notes/belief-blf-plan-2026-04-24.md`.
+
+**Why este ataque y no otro:**
+- Estructural (cambia el dato que mantiene el agente), no prompt-tweak
+- Mínimo (1 archivo, ~120 LOC) — cheap de validar
+- BLF ablation: sin belief state estructurado, -3.0 BI (=quitar web search).
+  Si transfiere, debería ser detectable con n=4 contra std≈6
+- Si NO mueve el needle con n=4: evidencia útil de que el bottleneck
+  no es el belief schema → pivotear a perception (region-based) o
+  multi-modelo
+
+**Próximo paso concreto:** implementar en `src/arcagi3/agent.py`,
+branch `autoresearch/belief-blf-2026-04-24`, experimento según plan.
+
 ## Conclusion
 <!-- Se llena al cerrar el issue -->
